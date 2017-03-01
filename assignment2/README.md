@@ -42,13 +42,6 @@ This assignment gives an important insight into a typical way a CPU schedulign a
 
 * * *
 
-<center>**<u><font size="+1">Demo Schedule:</font></u>**</center>
-
-<font color="#3333FF"><font size="+1">Md. Naquib Alam  
-Deeraj Soman  
-</font></font>  
-(Schedule: to be announced)
-
-* * *
 ## Developers' section   
 **fcfs.c** - First-come-first-served implementation
+* * *
