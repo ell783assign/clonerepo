@@ -1,3 +1,4 @@
 # Simulating CPU scheduling algorithms
 
-Will be updated after discussion
+**fcfs.c -** contains implementation of first-come-first-serve
+
