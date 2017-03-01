@@ -22,7 +22,8 @@ int main()
     printf("Enter total number of process: ");
     scanf("%d", &n);
     printf("Enter burst time for each process:\n");
-    for(i=0; i<n; i++) {
+    for(i=0; i<n; i++) 
+    {
         p[i].pid = i+1;
         printf("P[%d] : ", i+1);
         scanf("%d", &p[i].burst_time);
@@ -32,13 +33,15 @@ int main()
     // calculate waiting time and turnaround time
     p[0].turnaround_time = p[0].burst_time;
 
-    for(i=1; i<n; i++) {
+    for(i=1; i<n; i++) 
+    {
         p[i].waiting_time = p[i-1].waiting_time + p[i-1].burst_time;
         p[i].turnaround_time = p[i].waiting_time + p[i].burst_time;
     }
 
     // calculate sum of waiting time and sum of turnaround time
-    for(i=0; i<n; i++) {
+    for(i=0; i<n; i++) 
+    {
             sum_waiting_time += p[i].waiting_time;
             sum_turnaround_time += p[i].turnaround_time;
     }
@@ -69,7 +72,8 @@ void print_table(Process p[], int n)
     puts("| PID | Burst Time | Waiting Time | Turnaround Time |");
     puts("+-----+------------+--------------+-----------------+");
 
-    for(i=0; i<n; i++) {
+    for(i=0; i<n; i++) 
+    {
         printf("| %2d  |     %2d     |      %2d      |        %2d       |\n"
                , p[i].pid, p[i].burst_time, p[i].waiting_time, p[i].turnaround_time );
         puts("+-----+------------+--------------+-----------------+");
@@ -83,14 +87,16 @@ void print_gantt_chart(Process p[], int n)
     int i, j;
     // print top bar
     printf(" ");
-    for(i=0; i<n; i++) {
+    for(i=0; i<n; i++) 
+    {
         for(j=0; j<p[i].burst_time; j++) printf("--");
         printf(" ");
     }
     printf("\n|");
 
     // printing process id in the middle
-    for(i=0; i<n; i++) {
+    for(i=0; i<n; i++) 
+    {
         for(j=0; j<p[i].burst_time - 1; j++) printf(" ");
         printf("P%d", p[i].pid);
         for(j=0; j<p[i].burst_time - 1; j++) printf(" ");
@@ -98,7 +104,8 @@ void print_gantt_chart(Process p[], int n)
     }
     printf("\n ");
     // printing bottom bar
-    for(i=0; i<n; i++) {
+    for(i=0; i<n; i++) 
+    {
         for(j=0; j<p[i].burst_time; j++) printf("--");
         printf(" ");
     }
@@ -106,7 +113,8 @@ void print_gantt_chart(Process p[], int n)
 
     // printing the time line
     printf("0");
-    for(i=0; i<n; i++) {
+    for(i=0; i<n; i++) 
+    {
         for(j=0; j<p[i].burst_time; j++) printf("  ");
         if(p[i].turnaround_time > 9) printf("\b"); // backspace : remove 1 space
         printf("%d", p[i].turnaround_time);
