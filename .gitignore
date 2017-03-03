@@ -1,0 +1,7 @@
+*.o
+*~
+*.swp
+*.orig
+*.bak
+*.log
+*.d
