@@ -1,124 +1,9 @@
-#include <stdio.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdint.h>
-#include <stdlib.h>
-
-#include <sys/select.h>
-#include <sys/types.h>
-#include <sys/time.h>
-
-#include <arpa/inet.h>
-
+#include <utils.h>
 int32_t init_transport_connections(uint32_t);
 
 #define NUM_QUEUED_CONNECTIONS		5
 #define MAX_CONNECTIONS				10
 
-#define TRACE(...) 	fprintf(stderr, "TRACE  \t"__VA_ARGS__)
-#define WARN(...) 	fprintf(stderr, "WARNING\t"__VA_ARGS__)
-#define ERROR(...)  fprintf(stderr, "ERROR  \t"__VA_ARGS__)
-
-#define TRUE  		(uint32_t)1
-#define FALSE 		(uint32_t)0
-
-#define EXIT_ON_ERROR(...)				exit_on_error(__VA_ARGS__, TRUE)
-#define LOG_EXCEPTION(...)				exit_on_error(__VA_ARGS__, FALSE)
-
-typedef enum
-{
-	EQ = 0,
-	GT,
-	LT,
-	GTE,
-	LTE,
-
-	__MAX_MEMBER__
-} COMPARE_RULE;
-
-/**
- * @brief      Helper function (a macro) to handle error on function returns
- *
- * @param      msg           The message to be printed as diagnostic. NULL if nothing.
- * @param[in]  err_val       The error value that was returned.
- * @param[in]  expected_val  The expected value that should have been returned.
- * @param[in]  has_perror    Indicates if perror message is present for this condition
- * @param[in]  exit_prog	 Indicates if program must terminate on error or just log exception.
- */
-static inline void exit_on_error(char *msg, int32_t err_val, COMPARE_RULE rule, int32_t expected_val, uint32_t has_perror, uint32_t exit_prog)
-{
-	int32_t error_occurred = 1;
-	switch(rule)
-	{
-		case EQ:
-			if(err_val != expected_val)
-			{
-				goto EXIT_LABEL;
-			}
-			break;
-		case GT:
-			if(err_val <= expected_val)
-			{
-				goto EXIT_LABEL;
-			}
-			break;
-		case LT:
-			if(err_val >= expected_val)
-			{
-				goto EXIT_LABEL;
-			}
-			break;
-		case GTE:
-			if(err_val < expected_val)
-			{
-				goto EXIT_LABEL;
-			}
-			break;	
-		case LTE:
-			if(err_val > expected_val)
-			{
-				goto EXIT_LABEL;
-			}
-			break;
-	}
-	/* If we reach here, everything went fine. */
-	error_occurred = 0;
-
-EXIT_LABEL:	
-	if(error_occurred)
-	{
-		if(exit_prog)
-		{
-			if(msg)
-			{
-				ERROR("%s\n", msg);
-			}
-			ERROR("Received: %d\t Expected: %d\n", err_val, expected_val);
-			if(has_perror)
-			{
-				perror("Diagnostic");
-			}
-			exit(0);
-		}
-		else
-		{
-			if(msg)
-			{
-				WARN("%s\n", msg);
-			}
-			WARN("Received: %d\t Expected: %d\n", err_val, expected_val);
-			if(has_perror)
-			{
-				perror("Diagnostic");
-			}
-			exit(0);
-		}
-	}
-
-	return;
-}/**< exit_on_error */
 
 /**
  * A single connection instance
@@ -181,7 +66,9 @@ int32_t main(int32_t argc, char *argv[])
 	EXIT_ON_ERROR(NULL, sock_fd, GT, 0, FALSE);
 
 	FD_ZERO(&persistent_set);
-	FD_SET(sock_fd, &fds);
+	FD_SET(sock_fd, &persistent_set);
+
+	max_fd = sock_fd;
 
 	/* Start endless loop to serve as FTP */
 	while(1)
@@ -194,7 +81,7 @@ int32_t main(int32_t argc, char *argv[])
 		timeout_info.tv_sec = 0;
 		timeout_info.tv_usec = 5000; /* Wait for 5 milliseconds before timeout */
 
-		num_fd_ready = select(sock_fd+1, &fds, NULL, NULL, &timeout_info);
+		num_fd_ready = select(max_fd+1, &fds, NULL, NULL, &timeout_info);
 		if(num_fd_ready<0)
 		{
 			perror("Exception event on select()");
@@ -203,21 +90,27 @@ int32_t main(int32_t argc, char *argv[])
 		{
 			if(FD_ISSET(sock_fd, &fds))
 			{
-				TRACE("Incoming Data on listen socket.");
+				TRACE("Incoming connection request.\n");
 				next_available_fd_slot = next_available_fd_slot % MAX_CONNECTIONS;
 				connection_fds[next_available_fd_slot].sock_fd=accept(	sock_fd, 
 																		(struct sockaddr *)&connection_fds[next_available_fd_slot].addr, 
 																		&connection_fds[next_available_fd_slot].length);
 				LOG_EXCEPTION("Error accepting connection.", connection_fds[next_available_fd_slot].sock_fd, GTE, 0, TRUE);
 				FD_SET(connection_fds[next_available_fd_slot].sock_fd, &persistent_set);
-				
+
+				TRACE("New connection accepted on descriptor: %d\n",connection_fds[next_available_fd_slot].sock_fd);
 				next_available_fd_slot++;
+				if(max_fd<connection_fds[next_available_fd_slot].sock_fd)
+				{
+					max_fd = connection_fds[next_available_fd_slot].sock_fd;
+				}
 			}
 			for(ii=0;ii<MAX_CONNECTIONS;ii++)
 			{
 				if(FD_ISSET(connection_fds[next_available_fd_slot].sock_fd, &fds))
 				{
 					/* TODO: Read data */
+					TRACE("Data on connection socket.\n");
 				}
 			}
 		}
