@@ -92,4 +92,13 @@ int32_t receive_data(uint32_t *length, char **data);
  */
 int32_t process_get_or_put(uint32_t is_put, unsigned char *file_name);
 
+/**
+ * @brief      Process the exec request for `ls` or `cd` or `chmod`.
+ * 
+ *
+ * @param      command_string  The command string that must be executed and its reply sent.
+ *
+ * @return     0 if execution was successful, else, -1.
+ */
+int32_t process_exec(unsigned char *command_string);
 #endif
