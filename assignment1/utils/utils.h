@@ -15,6 +15,7 @@
 
 #include <arpa/inet.h>
 
+#include <dirent.h>
 
 #define TRACE(...) 	fprintf(stderr, "TRACE  \t"__VA_ARGS__)
 #define WARN(...) 	fprintf(stderr, "WARNING\t"__VA_ARGS__)
@@ -29,6 +30,7 @@
 typedef enum
 {
 	EQ = 0,
+	NEQ,
 	GT,
 	LT,
 	GTE,
@@ -53,6 +55,12 @@ static inline void exit_on_error(char *msg, int32_t err_val, COMPARE_RULE rule, 
 	{
 		case EQ:
 			if(err_val != expected_val)
+			{
+				goto EXIT_LABEL;
+			}
+			break;
+		case NEQ:
+			if(err_val == expected_val)
 			{
 				goto EXIT_LABEL;
 			}
@@ -118,5 +126,64 @@ EXIT_LABEL:
 
 	return;
 }/**< exit_on_error */
+
+#define MAX_DIR_BUF_LEN				1024
+
+typedef enum ftp_cmds 
+{  
+	LS=0,
+	CD,
+	CHMOD,
+	GET,
+	PUT,
+
+	__MAX_CMD_MEMBER__
+}FTP_CMD;
+
+typedef struct msg_hdr
+{
+	uint32_t cmd;
+	uint32_t is_request;
+	uint32_t response;
+	uint32_t length;
+}MSG_HDR;
+
+typedef struct msg_comn
+{
+	char data[1];
+}MSG_COMN;
+
+typedef struct msg_cd
+{
+	MSG_HDR hdr;
+	MSG_COMN comn;
+}MSG_CD;
+
+typedef struct msg_ls
+{
+	MSG_HDR hdr;
+	MSG_COMN comn;
+}MSG_LS;
+
+typedef struct msg_chmod
+{
+	MSG_HDR hdr;
+	uint8_t perms[3];
+	MSG_COMN comn;
+}MSG_CHMOD;
+
+typedef struct msg_get
+{
+	MSG_HDR hdr;
+	uint32_t file_name_len;
+	MSG_COMN comn;
+}MSG_GET;
+
+typedef struct msg_put
+{
+	MSG_HDR hdr;
+	uint32_t file_name_len;
+	MSG_COMN comn;
+}MSG_PUT;
 
 #endif

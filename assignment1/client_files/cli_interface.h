@@ -17,6 +17,7 @@ int32_t do_ls(char **msg);
 /**
  * @brief      				Invoked by the Command Line Interface when user types `cd`.
  *
+ * @param[in]		path    Path to cd to.
  * @param[out]      msg   	This contains a pointer to the string that must be output to the user
  * 							based on whether the operation was successful or not. Developer must 
  * 							first check the value returned by the function if the operation was 
@@ -25,7 +26,7 @@ int32_t do_ls(char **msg);
  * @return     				Returns 0 if `cd` command was successful, else -1 is returned.
  * 							Diagnostic string is returned in msg
  */
-int32_t do_cd(char **msg);
+int32_t do_cd(char *path, char **msg);
 
 /**
  * @brief      				Invoked by the Command Line Interface when user types `chmod`.
@@ -116,5 +117,14 @@ int32_t do_get(char *f_name, char **msg);
  * 							Diagnostic string is returned in msg. 				
  */
 int32_t do_put(char *f_name, char **msg);
+
+/**
+ * @brief      				Invoked by Command Line Interface to close the daemon.
+ *
+ * @param      sock_fd  	Socket Descriptor that is open.
+ *
+ * @return     				Nothing.
+ */
+void do_close(int32_t sock_fd);
 
 #endif

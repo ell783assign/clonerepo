@@ -54,6 +54,7 @@ int32_t receive_response(int32_t response);
 /**
  * @brief      Receives the output of the command that was executed remotely or file contents.
  *
+ * @param[in]  sock_fd  Descriptor on which data is to be received.
  * @param[out] length   Address of a length field where transport must write the number of
  * 						bytes that it has read from the socket in the `data` field.
  * @param[out] data  	Pointer to the address where the transport as written the data buffer 
@@ -62,7 +63,7 @@ int32_t receive_response(int32_t response);
  *
  * @return    Returns 0 if data was `length` bytes were successfully written into `data`. Else -1.
  */
-int32_t receive_data(uint32_t *length, char **data);
+int32_t receive_data(int32_t sock_fd, uint32_t *length, char **data);
 
 /**
  * @brief      Called by transport to allow the code to either save the received file or send the requested file.
