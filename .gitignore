@@ -1,0 +1,11 @@
+*.o
+*~
+*.swp
+*.orig
+*.bak
+*.log
+*.d
+*.a
+*.so
+assignment1/client
+assignment1/server
