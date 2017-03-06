@@ -22,6 +22,7 @@ int32_t main(int32_t argc, char *argv[])
 	char *server_address=NULL; /**< Server Listen Address */
 
 	int wordsfound,result,perm[3],permission;
+	
 	char **msg,userinput[MAXCMDLENGTH];
 
 	puts("+---------------------+");
