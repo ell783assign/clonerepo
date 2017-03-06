@@ -12,6 +12,7 @@
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 
 #include <arpa/inet.h>
 
@@ -186,4 +187,7 @@ typedef struct msg_put
 	MSG_COMN comn;
 }MSG_PUT;
 
+
+int32_t read_file_to_buffer(char *name, char **msg_buf, int32_t *length);
+int32_t write_file_to_disk(char *name, char *msg_buf, int32_t length);
 #endif

@@ -36,4 +36,4 @@ client: ${CLIENT_OBJS}
 	gcc $^ -o $@ -Lutils/ -lutils
 
 %.o:%.c
-	gcc -c $< -g -O0 -o $@ -Iutils/
+	gcc -c $< -fPIC -g -O0 -o $@ -Iutils/

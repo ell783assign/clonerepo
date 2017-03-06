@@ -1,9 +1,6 @@
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
-#include"cli_interface.h"
+#include <utils.h>
 
-#define MAXCMDLENGTH 512
+#include "cli_interface.h"
 
 char cmdargs[3][MAXCMDLENGTH];
 
@@ -58,7 +55,7 @@ int processthiscmd(char *userinput)
     if(token!= NULL)
     {
     	/* Found, put the rest of things into argument 2. We can have no more args */
-		strncpy(&cmdargs[1], token, strlen(token));
+		strncpy(cmdargs[1], token, strlen(token));
 		i=2;
 		wordsfoundintext++;
 		token = strtok(cmd, "\""); /* Skip the closing quote */
@@ -68,13 +65,13 @@ int processthiscmd(char *userinput)
     	i = 1;
     }
 
-	while((token!=strtok(NULL, " ") != NULL)
+	while((token=strtok(NULL, " ")) != NULL)
 	{
-		strncpy(&cmdargs[i], token, strlen(token));    			
+		strncpy(cmdargs[i], token, strlen(token));    			
 		wordsfoundintext++;
 	}
 
-goto EXIT_LABEL:
+EXIT_LABEL:
 	return (wordsfoundintext);	
 }
 #if 0

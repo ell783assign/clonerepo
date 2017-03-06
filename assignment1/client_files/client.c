@@ -1,5 +1,7 @@
 #include <utils.h>
 
+#include "cli_interface.h"
+
 int32_t connect_to_server(uint32_t, char *);
 
 int32_t sock_fd;
@@ -117,7 +119,7 @@ int32_t main(int32_t argc, char *argv[])
 			case 9:	
 				if(wordsfound==1)
 				{
-					result=do_close(msg, sock_fd);
+					do_close(sock_fd);
 				}
 				goto EXIT_LABEL;
 
@@ -180,9 +182,9 @@ int32_t do_lls(char **msg)
 
 	unsigned char dir_name[MAX_DIR_BUF_LEN];
 
-	if(getcwd(dir_name, sizeof(dir_name) == NULL)
+	if(getcwd(dir_name, sizeof(dir_name)) == NULL)
 	{
-		LOG_EXCEPTION("Failed to get directory structure.", NULL, NEQ, NULL, TRUE);
+		LOG_EXCEPTION("Failed to get directory structure.", 0, NEQ, 0, TRUE);
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
@@ -209,7 +211,10 @@ int32_t do_lcd(char *path, char **msg)
 	{
 		LOG_EXCEPTION("Error occurred while changing directory.", ret_val, EQ, 0, TRUE);
 		err_msg = (char *)malloc(sizeof(char) * 512);
-		EXIT_ON_ERROR("Error allocating memory.", err_msg, NEQ, NULL, FALSE);
+		if(!err_msg)
+		{
+			EXIT_ON_ERROR("Error allocating memory.", 0, NEQ, 0, FALSE);
+		}
 		sprintf(err_msg, "Error occurred while changing directory.");
 		*msg = err_msg;
 	}
@@ -266,17 +271,18 @@ int32_t do_ls(char **cmd_msg)
 	MSG_COMN *comn_msg = NULL;
 
 	msg = (MSG_LS *)malloc(sizeof(MSG_LS));
+	if(!msg)
 	{
-		LOG_EXCEPTION("Error allocating buffers.",msg, NEQ, NULL, FALSE);
+		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
 	memset(msg, 0, sizeof(MSG_LS));
 
-	msg->cmd = LS;
-	msg->is_request = TRUE;
-	msg->response = 0; /* Not applicable. */
-	msg->length = sizeof(MSG_LS);
+	msg->hdr.cmd = LS;
+	msg->hdr.is_request = TRUE;
+	msg->hdr.response = 0; /* Not applicable. */
+	msg->hdr.length = sizeof(MSG_LS);
 
 	ret_val = send_data(sock_fd, sizeof(MSG_LS), (char *)msg);
 	{
@@ -292,24 +298,25 @@ int32_t do_ls(char **cmd_msg)
 	}
 
 	/* Some response was received. */
-	ls_result = (char *)malloc((MSG_HDR *)msg->length - sizeof(MSG_HDR));
+	ls_result = (char *)malloc(msg->hdr.length - sizeof(MSG_HDR));
+	if(!ls_result)
 	{
-		LOG_EXCEPTION("Error allocating buffers.",ls_result, NEQ, NULL, FALSE);
+		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
 		ret_val = -1;
 		goto EXIT_LABEL;	
 	}
 
 	/* Receive all data from socket anyway, even if we have to discard it. */
-	ret_val = receive_data(sock_fd, (MSG_HDR *)msg->length - sizeof(MSG_HDR), ls_result);
+	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), ls_result);
 	{
 		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
 		goto EXIT_LABEL;
 	}
-	comn_msg = ls_result;
+	comn_msg = (MSG_COMN *)ls_result;
 
-	if(!((MSG_HDR *)msg->is_request) && !((MSG_HDR *)msg->response == 1))
+	if(!msg->hdr.is_request && !(msg->hdr.response == 1))
 	{
-		if(!((MSG_HDR *)msg->is_request))
+		if(!msg->hdr.is_request)
 		{
 			LOG_EXCEPTION("Malformed reply!", 0, EQ, 1, FALSE);
 			ret_val = -1;
@@ -323,7 +330,7 @@ int32_t do_ls(char **cmd_msg)
 	{
 		/* Else, ls output was sent. Print it out. */
 		fprintf(stdout, "%s\n", (char *)comn_msg);	
-		*msg = NULL;
+		*cmd_msg = NULL;
 	}
 	
 EXIT_LABEL:
@@ -351,22 +358,23 @@ int32_t do_cd(char *path, char **cmd_msg)
 	char *ls_result = NULL;
 	MSG_COMN *comn_msg = NULL;
 
-	msg = (MSG_LS *)malloc(sizeof(MSG_CD) + strlen(path));
+	msg = (MSG_CD *)malloc(sizeof(MSG_CD) + strlen(path));
+	if(!msg)
 	{
-		LOG_EXCEPTION("Error allocating buffers.",msg, NEQ, NULL, FALSE);
+		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
 	memset(msg, 0, sizeof(MSG_LS));
 
-	msg->cmd = CD;
-	msg->is_request = TRUE;
-	msg->response = 0; /* Not applicable. */
-	msg->length = sizeof(MSG_CD) + strlen(path);
+	msg->hdr.cmd = CD;
+	msg->hdr.is_request = TRUE;
+	msg->hdr.response = 0; /* Not applicable. */
+	msg->hdr.length = sizeof(MSG_CD) + strlen(path);
 
 	strncpy(msg->comn.data, path, strlen(path));
 
-	ret_val = send_data(sock_fd, msg->length, (char *)msg);
+	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
 	{
 		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, sizeof(MSG_LS), FALSE);
 		goto EXIT_LABEL;
@@ -381,24 +389,25 @@ int32_t do_cd(char *path, char **cmd_msg)
 	}
 
 	/* Some response was received. */
-	ls_result = (char *)malloc((MSG_HDR *)msg->length - sizeof(MSG_HDR));
+	ls_result = (char *)malloc(msg->hdr.length - sizeof(MSG_HDR));
+	if(!ls_result)
 	{
-		LOG_EXCEPTION("Error allocating buffers.",ls_result, NEQ, NULL, FALSE);
+		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
 		ret_val = -1;
 		goto EXIT_LABEL;	
 	}
 
 	/* Receive all data from socket anyway, even if we have to discard it. */
-	ret_val = receive_data(sock_fd, (MSG_HDR *)msg->length - sizeof(MSG_HDR), ls_result);
+	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), ls_result);
 	{
 		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
 		goto EXIT_LABEL;
 	}
-	comn_msg = ls_result;
+	comn_msg = (MSG_COMN*)ls_result;
 
-	if(!((MSG_HDR *)msg->is_request) && !((MSG_HDR *)msg->response == 1))
+	if(!msg->hdr.is_request && !(msg->hdr.response == 1))
 	{
-		if(!((MSG_HDR *)msg->is_request))
+		if(!msg->hdr.is_request)
 		{
 			LOG_EXCEPTION("Malformed reply!", 0, EQ, 1, FALSE);
 			ret_val = -1;
@@ -435,26 +444,27 @@ int32_t do_chmod(int32_t perm[3], char *path, char **cmd_msg)
 	char *ls_result = NULL;
 	MSG_COMN *comn_msg = NULL;
 
-	msg = (MSG_LS *)malloc(sizeof(MSG_CHMOD) + strlen(path));
+	msg = (MSG_CHMOD *)malloc(sizeof(MSG_CHMOD) + strlen(path));
+	if(!msg)
 	{
-		LOG_EXCEPTION("Error allocating buffers.",msg, NEQ, NULL, FALSE);
+		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
 	memset(msg, 0, sizeof(MSG_CHMOD) + strlen(path));
 
-	msg->cmd = CHMOD;
-	msg->is_request = TRUE;
-	msg->response = 0; /* Not applicable. */
-	msg->length = sizeof(MSG_CHMOD) + strlen(path);
+	msg->hdr.cmd = CHMOD;
+	msg->hdr.is_request = TRUE;
+	msg->hdr.response = 0; /* Not applicable. */
+	msg->hdr.length = sizeof(MSG_CHMOD) + strlen(path);
 
-	msg->perms[0] = perm[0];
-	msg->perms[1] = perm[1];
-	msg->perms[2] = perm[2];
+	msg->perms[0] = (uint8_t)perm[0];
+	msg->perms[1] = (uint8_t)perm[1];
+	msg->perms[2] = (uint8_t)perm[2];
 
 	strncpy(msg->comn.data, path, strlen(path));
 
-	ret_val = send_data(sock_fd, msg->length, (char *)msg);
+	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
 	{
 		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, sizeof(MSG_LS), FALSE);
 		goto EXIT_LABEL;
@@ -469,25 +479,26 @@ int32_t do_chmod(int32_t perm[3], char *path, char **cmd_msg)
 	}
 
 	/* Some response was received. */
-	ls_result = (char *)malloc((MSG_HDR *)msg->length - sizeof(MSG_HDR));
+	ls_result = (char *)malloc(msg->hdr.length - sizeof(MSG_HDR));
+	if(!ls_result)
 	{
-		LOG_EXCEPTION("Error allocating buffers.",ls_result, NEQ, NULL, FALSE);
+		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
 		ret_val = -1;
 		goto EXIT_LABEL;	
 	}
 
 	/* Receive all data from socket anyway, even if we have to discard it. */
-	ret_val = receive_data(sock_fd, (MSG_HDR *)msg->length - sizeof(MSG_HDR), ls_result);
+	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), ls_result);
 	{
 		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
 		goto EXIT_LABEL;
 	}
 	/* Align pointer to read error message if any */
-	comn_msg = (unsigned char *)ls_result + (sizeof(uint8_t)*3);
+	comn_msg = (MSG_COMN*)((unsigned char *)ls_result + (sizeof(uint8_t)*3));
 
-	if(!((MSG_HDR *)msg->is_request) && !((MSG_HDR *)msg->response == 1))
+	if(!(msg->hdr.is_request) && !(msg->hdr.response == 1))
 	{
-		if(!((MSG_HDR *)msg->is_request))
+		if(!msg->hdr.is_request)
 		{
 			LOG_EXCEPTION("Malformed reply!", 0, EQ, 1, FALSE);
 			ret_val = -1;
@@ -511,5 +522,175 @@ EXIT_LABEL:
 		ls_result = NULL;
 	}
 
+	return(ret_val);	
+}
+
+int32_t do_put(char *file_name, char **err_msg_ptr)
+{
+	int32_t ret_val = 0;
+
+	char *buf=NULL;
+	int32_t len;
+
+	MSG_PUT *msg = NULL;
+
+	char *ls_result = NULL;
+	MSG_COMN *comn_msg = NULL;
+
+	ret_val = read_file_to_buffer(file_name, &buf, &len);
+	{
+		LOG_EXCEPTION("Could not read file.", ret_val, EQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;
+	}
+
+	msg = (MSG_PUT *)malloc(sizeof(MSG_PUT)+ strlen(file_name) + len);
+	if(!msg)
+	{
+		LOG_EXCEPTION("Error allocating transport buffer.", 0, NEQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;
+	}
+
+	msg->hdr.cmd = PUT;
+	msg->hdr.is_request = TRUE;
+	msg->hdr.response = 0;
+	msg->hdr.length = sizeof(MSG_PUT)+ strlen(file_name) + len;
+
+	msg->file_name_len = strlen(file_name)+1;
+	snprintf(msg->comn.data, strlen(file_name), "%s", file_name);
+
+	memcpy((char *)msg->comn.data + strlen(file_name)+1, msg, len);
+
+	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
+	{
+		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, sizeof(MSG_LS), FALSE);
+		goto EXIT_LABEL;
+	}
+
+	memset(msg, 0, sizeof(MSG_PUT));
+	ret_val = receive_data(sock_fd, sizeof(MSG_HDR), msg);
+	{
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		goto EXIT_LABEL;
+	}
+
+	/* Some response was received. */
+	ls_result = (char *)malloc(msg->hdr.length - sizeof(MSG_HDR));
+	if(!ls_result)
+	{
+		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;	
+	}
+
+	/* Receive all data from socket anyway, even if we have to discard it. */
+	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), ls_result);
+	{
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		goto EXIT_LABEL;
+	}
+	/* Align pointer to read error message if any */
+	comn_msg = (MSG_COMN*)((unsigned char *)ls_result + (sizeof(uint8_t)*3));
+
+	if(!(msg->hdr.is_request) && !(msg->hdr.response == 1))
+	{
+		if(!msg->hdr.is_request)
+		{
+			LOG_EXCEPTION("Malformed reply!", 0, EQ, 1, FALSE);
+			ret_val = -1;
+			goto EXIT_LABEL;	
+		}
+
+		/* Else, error at server. Read error message. */
+		fprintf(stdout, "%s\n", (char *)comn_msg);
+	}
+	/* else put command was successful */
+	
+
+
+EXIT_LABEL:	
+	return ret_val;
+}
+
+int32_t do_get(char *file_name, char **err_msg_ptr)
+{
+	int32_t ret_val = 0;
+
+	char *buf=NULL;
+	int32_t len;
+
+	MSG_GET *msg = NULL;
+
+	char *ls_result = NULL;
+	MSG_COMN *comn_msg = NULL;
+
+	msg = (MSG_GET *)malloc(sizeof(MSG_GET)+ strlen(file_name));
+	if(!msg)
+	{
+		LOG_EXCEPTION("Error allocating transport buffer.", 0, NEQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;
+	}
+
+	msg->hdr.cmd = PUT;
+	msg->hdr.is_request = TRUE;
+	msg->hdr.response = 0;
+	msg->hdr.length = sizeof(MSG_PUT)+ strlen(file_name);
+
+	msg->file_name_len = strlen(file_name)+1;
+	snprintf(msg->comn.data, strlen(file_name), "%s", file_name);
+
+	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
+	{
+		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, sizeof(MSG_LS), FALSE);
+		goto EXIT_LABEL;
+	}
+
+	memset(msg, 0, sizeof(MSG_GET));
+	ret_val = receive_data(sock_fd, sizeof(MSG_HDR), msg);
+	{
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		goto EXIT_LABEL;
+	}
+
+	/* Some response was received. */
+	ls_result = (char *)malloc(msg->hdr.length - sizeof(MSG_HDR));
+	if(!ls_result)
+	{
+		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;	
+	}
+
+	/* Receive all data from socket anyway, even if we have to discard it. */
+	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), ls_result);
+	{
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		goto EXIT_LABEL;
+	}
+	/* Align pointer to read error message if any */
+	comn_msg = (MSG_COMN*)((unsigned char *)ls_result + sizeof(uint32_t));
+
+	if(!(msg->hdr.is_request) && !(msg->hdr.response == 1))
+	{
+		if(!msg->hdr.is_request)
+		{
+			LOG_EXCEPTION("Malformed reply!", 0, EQ, 1, FALSE);
+			ret_val = -1;
+			goto EXIT_LABEL;	
+		}
+
+		/* Else, error at server. Read error message. */
+		fprintf(stdout, "%s\n", (char *)comn_msg);
+	}
+	/* else get command was successful. Save into file */
+	/* Don't need to send back the file name */
+	ret_val = write_file_to_disk(file_name, comn_msg, msg->hdr.length - sizeof(MSG_PUT)+1);
+	{
+		LOG_EXCEPTION("Error writing to disk",ret_val, EQ, 0, FALSE);	
+		goto EXIT_LABEL;
+	}
+EXIT_LABEL:
 	return(ret_val);	
 }
