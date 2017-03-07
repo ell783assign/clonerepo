@@ -98,6 +98,7 @@ int32_t main(int32_t argc, char *argv[])
 				if(wordsfound==1)
 				{
 					result=do_lls(&length, &msg);
+					fprintf(stdout, "%s", msg);
 				}
 				break;
 			case 5:	

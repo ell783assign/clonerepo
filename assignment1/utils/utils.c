@@ -169,8 +169,7 @@ int32_t do_lls(uint32_t *length, char **msg)
 			current_ptr = (char *)return_buffer + run_length;
 		}
 		/* now we have sufficiently large buffer. Copy results */
-		snprintf(current_ptr, strlen(file_iterator->d_name)+1, "\n%s",file_iterator->d_name);
-		TRACE("%s\n", current_ptr);
+		snprintf(current_ptr, strlen(file_iterator->d_name)+2, "\n%s",file_iterator->d_name);
 		/* increment runlength*/
 		run_length +=strlen(file_iterator->d_name)+1;/* +1 for \n */
 		/* advance current_ptr*/
