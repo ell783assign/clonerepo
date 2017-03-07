@@ -25,7 +25,9 @@ int32_t main(int32_t argc, char *argv[])
 
 	int wordsfound,result,perm[3],permission;
 	
-	char **msg,userinput[MAXCMDLENGTH];
+	char *msg, userinput[MAXCMDLENGTH]={0};
+
+	int32_t length;
 
 	puts("+---------------------+");
 	puts("|Welcome to FTP client|");
@@ -51,23 +53,34 @@ int32_t main(int32_t argc, char *argv[])
 	while(TRUE)
 	{	
 		printf("ftp>");
-		gets(userinput);
+		if(alt_gets(userinput)!=0)
+		{
+			EXIT_ON_ERROR("Could not parse input.", 0, NEQ, 0, FALSE);
+		}
 		wordsfound=processthiscmd(userinput);
 		if(wordsfound==0)
+		{
+			TRACE("No command entered.\n");
 			continue;
+		}
 		result=99;
+		TRACE("%d\n",cmdnum(cmdargs[0]));
 		switch(cmdnum(cmdargs[0]))
 		{	
 			case 1:	
 				if(wordsfound==1)
 				{
-					result=do_ls(msg);
+					result=do_ls(&length, &msg);
+					if(!result)
+					{
+						fprintf(stdout, "%s", msg);
+					}
 				}
 				break;
 			case 2:	
 				if(wordsfound==2)
 				{
-					result=do_cd(cmdargs[1],msg);
+					result=do_cd(cmdargs[1],&length, &msg);
 				}
 				break;
 			case 3:	
@@ -77,20 +90,20 @@ int32_t main(int32_t argc, char *argv[])
 					{	perm[0]=permission/100;
 						perm[2]=permission%10;
 						perm[1]=(permission-100*perm[0]-perm[2])/10;
-						result=do_chmod(perm,cmdargs[2],msg);
+						result=do_chmod(perm, cmdargs[2], &length, &msg);
 					}
 				}
 				break;
 			case 4:	
 				if(wordsfound==1)
 				{
-					result=do_lls(msg);
+					result=do_lls(&length, &msg);
 				}
 				break;
 			case 5:	
 				if(wordsfound==2)
 				{
-					result=do_lcd(cmdargs[1],msg);
+					result=do_lcd(cmdargs[1], &length, &msg);
 				}
 				break;
 			case 6:	
@@ -100,20 +113,20 @@ int32_t main(int32_t argc, char *argv[])
 					{	perm[0]=permission/100;
 						perm[2]=permission%10;
 						perm[1]=(permission-100*perm[0]-perm[2])/10;
-						result=do_lchmod(perm,cmdargs[2],msg);
+						result=do_lchmod(perm,cmdargs[2], &length, &msg);
 					}
 				}
 				break;
 			case 7:	
 				if(wordsfound==2)
 				{
-					result=do_put(cmdargs[1],msg);
+					result=do_put(cmdargs[1],&length, &msg);
 				}
 				break;
 			case 8:	
 				if(wordsfound==2)
 				{
-					result=do_get(cmdargs[1],msg);
+					result=do_get(cmdargs[1],&length, &msg);
 				}
 				break;
 			case 9:	
@@ -130,7 +143,7 @@ int32_t main(int32_t argc, char *argv[])
 				}
 		}
 		if(result==-1)
-			printdiagnosticmsg(msg);
+			printdiagnosticmsg(&msg);
 		else if(result==99)
 			printf("Command with inadequate/surplus/wrong arguments\n");
 	}
@@ -183,7 +196,7 @@ void do_close(int32_t fd)
 	return;
 }
 
-int32_t do_ls(char **cmd_msg)
+int32_t do_ls(uint32_t *length, char **cmd_msg)
 {
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
@@ -274,7 +287,7 @@ EXIT_LABEL:
 	return(ret_val);	
 }
 
-int32_t do_cd(char *path, char **cmd_msg)
+int32_t do_cd(char *path, uint32_t *length, char **cmd_msg)
 {
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
@@ -363,7 +376,7 @@ EXIT_LABEL:
 	return(ret_val);	
 }
 
-int32_t do_chmod(int32_t perm[3], char *path, char **cmd_msg)
+int32_t do_chmod(int32_t perm[3], char *path, uint32_t *length, char **cmd_msg)
 {
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
@@ -457,7 +470,7 @@ EXIT_LABEL:
 	return(ret_val);	
 }
 
-int32_t do_put(char *file_name, char **err_msg_ptr)
+int32_t do_put(char *file_name, uint32_t *length, char **err_msg_ptr)
 {
 	int32_t ret_val = 0;
 
@@ -549,7 +562,7 @@ EXIT_LABEL:
 	return ret_val;
 }
 
-int32_t do_get(char *file_name, char **err_msg_ptr)
+int32_t do_get(char *file_name, uint32_t *length, char **err_msg_ptr)
 {
 	int32_t ret_val = 0;
 
@@ -574,7 +587,6 @@ int32_t do_get(char *file_name, char **err_msg_ptr)
 	msg->hdr.response = 0;
 	msg->hdr.length = sizeof(MSG_PUT)+ strlen(file_name);
 
-	msg->file_name_len = strlen(file_name)+1;
 	snprintf(msg->comn.data, strlen(file_name), "%s", file_name);
 
 	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);

@@ -1,6 +1,6 @@
 #include <utils.h>
 
-#include "cli_interface.h"
+#include <cli_interface.h>
 
 char cmdargs[3][MAXCMDLENGTH];
 
@@ -10,14 +10,15 @@ void printdiagnosticmsg(char **msg)
 }
 
 int cmdnum(char *cmd)
-{	if(strcmp("ls",cmd)==0)
+{	
+	if(strcmp("lls",cmd)==0)
+		return 4;	
+	if(strcmp("ls",cmd)==0)
 			return 1;
 	if(strcmp("cd",cmd)==0)
 			return 2;
 	if(strcmp("chmod",cmd)==0)
 			return 3;
-	if(strcmp("lls",cmd)==0)
-			return 4;
 	if(strcmp("lcd",cmd)==0)
 			return 5;
 	if(strcmp("lchmod",cmd)==0)
@@ -37,7 +38,6 @@ int processthiscmd(char *userinput)
 
 	int i,k,nomorewords;
 
-	char *cmd = NULL;
 	char *token;
 
 	if(strlen(userinput)==0)
@@ -45,20 +45,24 @@ int processthiscmd(char *userinput)
 		goto EXIT_LABEL;
 	}
 	/* Otherwise, we have a command */
-	token = strtok(cmd, " ");
+	token = strtok(userinput, " ");
+	if(!token)
+	{
+		ERROR("No Command found!\n");
+	}
     
     strncpy(cmdargs[0], token, strlen(token));
 	wordsfoundintext++;
 
     /* Try to find first parameter. It could open with a double quote */
-    token = strtok(cmd, "\"");
+    token = strtok(NULL, "\"");
     if(token!= NULL)
     {
     	/* Found, put the rest of things into argument 2. We can have no more args */
 		strncpy(cmdargs[1], token, strlen(token));
 		i=2;
 		wordsfoundintext++;
-		token = strtok(cmd, "\""); /* Skip the closing quote */
+		token = strtok(NULL, "\""); /* Skip the closing quote */
     }
     else
     {

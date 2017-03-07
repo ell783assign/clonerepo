@@ -12,7 +12,7 @@
  * @return     				Returns 0 if ls command was successful, else -1 is returned.
  * 							Diagnostic string is returned in msg
  */
-int32_t do_ls(char **);
+int32_t do_ls(uint32_t *, char **);
 
 /**
  * @brief      				Invoked by the Command Line Interface when user types `cd`.
@@ -26,7 +26,7 @@ int32_t do_ls(char **);
  * @return     				Returns 0 if `cd` command was successful, else -1 is returned.
  * 							Diagnostic string is returned in msg
  */
-int32_t do_cd(char *, char **);
+int32_t do_cd(char *, uint32_t *, char **);
 
 /**
  * @brief      				Invoked by the Command Line Interface when user types `chmod`.
@@ -47,7 +47,7 @@ int32_t do_cd(char *, char **);
  * @return     				Returns 0 if `chmod` command was successful, else -1 is returned.
  * 							Diagnostic string is returned in msg
  */
-int32_t do_chmod(int32_t *, char *, char **);
+int32_t do_chmod(int32_t *, char *, uint32_t *, char **);
 
 /**
  * @brief      				Invoked by the Command Line Interface when user types `lcd`.
@@ -61,7 +61,7 @@ int32_t do_chmod(int32_t *, char *, char **);
  * @return     				Returns 0 if `lcd` command was successful, else -1 is returned.
  * 							Diagnostic string is returned in msg
  */
-int32_t do_lcd(char *, char **);
+int32_t do_lcd(char *, uint32_t *, char **);
 
 /**
  * @brief      				Invoked by the Command Line Interface when user types `lls`.
@@ -74,7 +74,7 @@ int32_t do_lcd(char *, char **);
  * @return     				Returns 0 if `lls` command was successful, else -1 is returned.
  * 							Diagnostic string is returned in msg
  */
-int32_t do_lls(char **);
+int32_t do_lls(uint32_t *, char **);
 
 /**
  * @brief      				Invoked by the Command Line Interface when user types `lchmod`.
@@ -95,7 +95,7 @@ int32_t do_lls(char **);
  * @return     				Returns 0 if `lchmod` command was successful, else -1 is returned.
  * 							Diagnostic string is returned in msg
  */
-int32_t do_lchmod(int32_t * , char *, char **);
+int32_t do_lchmod(int32_t * , char *, uint32_t *, char **);
 
 /**
  * @brief      				Invoked by Command Line Interface when user types `get`.
@@ -106,7 +106,7 @@ int32_t do_lchmod(int32_t * , char *, char **);
  * @return     				Returns 0 if `get` was successful, else, -1 is returned.
  * 							Diagnostic string is returned in msg. 				
  */
-int32_t do_get(char *, char **);
+int32_t do_get(char *, uint32_t *, char **);
 
 /**
  * @brief      				Invoked by Command Line Interface when user types `put`.
@@ -117,7 +117,7 @@ int32_t do_get(char *, char **);
  * @return     				Returns 0 if `put` was successful, else, -1 is returned.
  * 							Diagnostic string is returned in msg. 				
  */
-int32_t do_put(char *, char **);
+int32_t do_put(char *, uint32_t *, char **);
 
 /**
  * @brief      				Invoked by Command Line Interface to close the daemon.

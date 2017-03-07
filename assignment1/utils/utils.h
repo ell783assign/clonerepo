@@ -18,6 +18,8 @@
 
 #include <dirent.h>
 
+int32_t alt_gets(char *);
+
 #define TRACE(...) 	fprintf(stderr, "TRACE  \t"__VA_ARGS__)
 #define WARN(...) 	fprintf(stderr, "WARNING\t"__VA_ARGS__)
 #define ERROR(...)  fprintf(stderr, "ERROR  \t"__VA_ARGS__)
@@ -176,9 +178,9 @@ typedef struct msg_chmod
 typedef struct msg_get
 {
 	MSG_HDR hdr;
-	uint32_t file_name_len;
 	MSG_COMN comn;
 }MSG_GET;
+
 
 typedef struct msg_put
 {

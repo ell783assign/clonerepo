@@ -1,7 +1,28 @@
 #include <utils.h>
+#include <cli_interface.h>
 
-/* For now, it is just a placeholder. */
+int32_t alt_gets(char *buffer)
+{
+	char buf[MAXCMDLENGTH];
 
+	memset(buf, '\0', sizeof(buf));
+
+	if(fgets(buf, sizeof(buf), stdin))
+	{
+		/* remove trailing \n */
+		if(strlen(buf)>0 && buf[strlen(buf)-1]=='\n')
+		{
+			snprintf(buffer, strlen(buf), "%s", buf);
+		}
+		else
+		{
+			snprintf(buffer, strlen(buf), "%s", buf);	
+		}
+		return(0);
+	}
+	return(-1);
+	
+}
 int32_t read_file_to_buffer(char *name, char **msg_buf, int32_t *length)
 {
 	int32_t ret_val = 0;
@@ -101,9 +122,19 @@ int32_t receive_data(int32_t sock_fd, uint32_t length, char *buf)
 }
 
 
-int32_t do_lls(char **msg)
+int32_t do_lls(uint32_t *length, char **msg)
 {
+	TRACE("enter do_lls\n");
 	int32_t ret_val = 0;
+
+	char *return_buffer = (char *)malloc(sizeof(char) * 1024);
+	if(!return_buffer)
+	{
+		EXIT_ON_ERROR("Could not allocate sufficient memory to save output.", 0, NEQ, 0, FALSE);
+	}
+	char *current_ptr = return_buffer;
+	int32_t run_length = 0;
+	int32_t max_len = 1024;
 
 	DIR *current_dir = NULL;
 	struct dirent *file_iterator;
@@ -117,20 +148,47 @@ int32_t do_lls(char **msg)
 		goto EXIT_LABEL;
 	}
 
+	TRACE("Inside %s\n", dir_name);
 	current_dir = opendir(dir_name);
+	if(!current_dir)
+	{
+		EXIT_ON_ERROR("Could not open directory for parsing files.", 0, NEQ, 0, TRUE);
+	}
 	while((file_iterator = readdir(current_dir)) !=NULL)
 	{
-		fprintf(stdout, "%s\n", file_iterator->d_name);
+		/* If memory is not sufficient, grow buffer */
+		while(run_length+strlen(file_iterator->d_name)+2 > max_len)/* +2 for \n and NULL character */
+		{
+			max_len += 1024;
+			return_buffer = (char *)realloc(return_buffer, max_len);
+			if(!return_buffer)
+			{
+				EXIT_ON_ERROR("Could not allocate sufficient memory to save output.", 0, NEQ, 0, FALSE);
+			}
+			/* Realign current_ptr*/
+			current_ptr = (char *)return_buffer + run_length;
+		}
+		/* now we have sufficiently large buffer. Copy results */
+		snprintf(current_ptr, strlen(file_iterator->d_name)+1, "\n%s",file_iterator->d_name);
+		TRACE("%s\n", current_ptr);
+		/* increment runlength*/
+		run_length +=strlen(file_iterator->d_name)+1;/* +1 for \n */
+		/* advance current_ptr*/
+		current_ptr += strlen(file_iterator->d_name)+1;
+		//fprintf(stdout, "%s\n", file_iterator->d_name);
 	}
+
 	closedir(current_dir);
 
-	*msg = NULL;
+	*msg = return_buffer;
+	*length = run_length+1;/*1 for NULL character */
 
 EXIT_LABEL:
+	TRACE("exit do_lls\n");
 	return 	(ret_val);
 }
 
-int32_t do_lcd(char *path, char **msg)
+int32_t do_lcd(char *path, uint32_t *length, char **msg)
 {
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
@@ -151,7 +209,7 @@ int32_t do_lcd(char *path, char **msg)
 	return(ret_val);
 }
 
-int32_t do_lchmod(int32_t perm[3], char * f_name, char **msg)
+int32_t do_lchmod(int32_t perm[3], char * f_name, uint32_t *length, char **msg)
 {
 	/** https://www.gnu.org/software/libc/manual/html_node/Permission-Bits.html */
 	int32_t ret_val = 0;

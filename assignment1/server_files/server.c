@@ -2,6 +2,10 @@
 #include <cli_interface.h>
 int32_t init_transport_connections(uint32_t);
 
+int32_t handle_incoming_data(int32_t );
+int32_t handle_put(char *, char *, uint32_t *, char **);
+int32_t handle_get(char *, uint32_t *, char **);
+
 #define NUM_QUEUED_CONNECTIONS		5
 #define MAX_CONNECTIONS				10
 
@@ -164,11 +168,16 @@ int32_t handle_incoming_data(int32_t sock_fd)
 
 	int32_t num_reads = 0;
 
-	char *msg; 
+	char *msg;
+	char *request; 
+	char *filename;
 	uint32_t length;
 	uint32_t response_length = sizeof(MSG_HDR);
 
+	int32_t perm[3];
+
 	MSG_GEN *gen=NULL;
+
 
 	MSG_HDR *hdr = (MSG_HDR *)malloc(sizeof(MSG_HDR));
 	if(!hdr)
@@ -186,6 +195,25 @@ int32_t handle_incoming_data(int32_t sock_fd)
 		goto EXIT_LABEL;	
 	}
 
+	/* receive the rest of data too. */
+	gen = (MSG_GEN *)malloc(sizeof(char)*hdr->length);
+	if(!gen)
+	{
+		LOG_EXCEPTION("Error allocating buffer for message body.", 0, NEQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;
+	}	
+
+	/* Align pointer to receive rest of data */
+	request = (char *)((char *)gen + sizeof(MSG_HDR));
+	ret_val = receive_data(sock_fd, hdr->length - sizeof(MSG_HDR), (char *)request);
+	if(ret_val != 0)
+	{
+		LOG_EXCEPTION("Error allocating buffer for message header.", ret_val, EQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;	
+	}
+
 	switch(hdr->cmd)
 	{
 		case LS:
@@ -196,26 +224,42 @@ int32_t handle_incoming_data(int32_t sock_fd)
 			}
 			break;
 		case CD:
-			ret_val = do_lcd(&length, &msg);
+			ret_val = do_lcd(request, &length, &msg);
 			if(ret_val != 0)
 			{
 				response_length += length;
 			}
 			break;
 		case CHMOD:
-			ret_val = do_lchmod(&length, &msg);
+
+			perm[0] = 0 | gen->chmod.perms[0];
+			perm[1] = 0 | gen->chmod.perms[1];
+			perm[2] = 0 | gen->chmod.perms[2];
+
+			request = (char *)(gen->chmod.comn.data);
+			ret_val = do_lchmod(perm, request, &length, &msg);
 			if(ret_val != 0)
 			{
 				response_length += length+(sizeof(uint8_t)*3);
 			}
 			break;
+
 		case GET:
-			ret_val = handle_get(&length, &msg);
+			ret_val = handle_get(request, &length, &msg);
 			response_length += length;
 			break;
 
 		case PUT:
-			ret_val = handle_put(&length, &msg);
+			filename = (char *)malloc(sizeof(char) * gen->put.file_name_len);
+			if(!filename)
+			{
+				LOG_EXCEPTION("Error allocating buffer for file name.", 0, NEQ, 0, FALSE);
+				ret_val = -1;
+				goto EXIT_LABEL;
+			}
+			strncpy(filename, gen->put.comn.data, gen->put.file_name_len);
+			request = 	(char *)(gen->put.comn.data + gen->put.file_name_len);			
+			ret_val = handle_put(filename, request, &length, &msg);
 			if(ret_val != 0)
 			{
 				response_length += length;
@@ -230,4 +274,22 @@ int32_t handle_incoming_data(int32_t sock_fd)
 
 EXIT_LABEL:
 	return(ret_val);
+}
+
+int32_t handle_get(char *filename, uint32_t *length, char **msg)
+{
+	int32_t ret_val = 0;
+
+
+EXIT_LABEL:
+	return(ret_val);	
+}
+
+int32_t handle_put(char *filename, char *contents, uint32_t *length, char **msg)
+{
+	int32_t ret_val = 0;
+
+
+EXIT_LABEL:
+	return(ret_val);	
 }
