@@ -10,7 +10,7 @@
  * The `Data` can be an exec command request like `ls`, `cd`, `get <file>`, 
  * `put <file>`, `chmod <permissions> <file>` .
  *
- * Or, it can be the actual file contents follwing a `put <file>` request. Thus, when implementing
+ * Or, it can be the actual file contents following a `put <file>` request. Thus, when implementing
  * `put <file>`, this method will be called twice as follows:
  * 
  * send_data(dest_fd, strlen("put some_file.txt"), "put some_file.txt");
@@ -31,6 +31,8 @@
  *
  * @return     Returns 0 if all data was sent. Else -1 is returned.
  */
+ 
+
 int32_t send_data(int32_t dest_fd, int32_t length, unsigned char *buffer);
 
 /**
@@ -40,29 +42,30 @@ int32_t send_data(int32_t dest_fd, int32_t length, unsigned char *buffer);
  * 
  * So, when the client calls send_data(fd, strlen("ls"), "ls"); it expects to
  * know whether the operation was successful or not. So, the server first
- * sends an explicit response of `0` or `1` for failure or success respectively.
- * Then, based on that result, the client will determine if it must call
- * receive_result() or not (where actual content results of `ls` command would be contained).
+ * sends an explicit response of a string containing `whitespace separated integers`,
+ * the first integer is either `0` or `1` followed by the size of buffer that is to be
+ * expected in next read() usage in receive_data().
  * 
- * @param[in]  response  The response code of whether operation was successful or not.
- *
+ * @param[in]  sock_fd      : The socket file descriptor from which response is to be read
+ * @param[in]  response[]   : Array, response[0] ---> response `0` or `1`
+ *                                   response[1] ---> size of buffer to be expected
  * @return     Returns 0 if a response message was successfully received from socket, else -1.
  */
-int32_t receive_response(int32_t response);
+int32_t receive_response(int32_t sock_fd, int32_t response[]);
 
 
-/**
+/*
  * @brief      Receives the output of the command that was executed remotely or file contents.
  *
- * @param[out] length   Address of a length field where transport must write the number of
- * 						bytes that it has read from the socket in the `data` field.
+ * @param[out] sock_fd   socket file descriptor from which the response is to be read
+ * @param[out] length   Address of a length field, here response[1] from receive_response is passed on as a parameter
  * @param[out] data  	Pointer to the address where the transport as written the data buffer 
  * 						which contains either the output of command, or contents of the file 
  * 						that is being transferred. 
  *
  * @return    Returns 0 if data was `length` bytes were successfully written into `data`. Else -1.
  */
-int32_t receive_data(uint32_t *length, char **data);
+int32_t receive_data(int32_t sockfd, int32_t length, char** data);
 
 /**
  * @brief      Called by transport to allow the code to either save the received file or send the requested file.
