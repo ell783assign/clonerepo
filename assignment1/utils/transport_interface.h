@@ -58,14 +58,14 @@ int32_t receive_response(int32_t sock_fd, int32_t response[]);
  * @brief      Receives the output of the command that was executed remotely or file contents.
  *
  * @param[out] sock_fd   socket file descriptor from which the response is to be read
- * @param[out] length   Address of a length field, here response[1] from receive_response is passed on as a parameter
+ * @param[out] length   The length field, here response[1] from receive_response is passed on as a parameter
  * @param[out] data  	Pointer to the address where the transport as written the data buffer 
  * 						which contains either the output of command, or contents of the file 
  * 						that is being transferred. 
  *
  * @return    Returns 0 if data was `length` bytes were successfully written into `data`. Else -1.
  */
-int32_t receive_data(int32_t sockfd, int32_t length, char** data);
+int32_t receive_data(int32_t sock_fd, int32_t length, char **data);
 
 /**
  * @brief      Called by transport to allow the code to either save the received file or send the requested file.
@@ -88,20 +88,24 @@ int32_t receive_data(int32_t sockfd, int32_t length, char** data);
  * 
  * Then, this function can save the file on server and return successfully.
  *
+ * @param      sock_fd   socket file descriptor from which the response is to be read
  * @param[in]  is_put     Indicates if the command requested is `put` or not. If not, then it is `get`.
  * @param      file_name  The file name that is to be `put` or `get`.
  *
  * @return     0 if put/get was successful, else -1.
  */
-int32_t process_get_or_put(uint32_t is_put, unsigned char *file_name);
+int32_t process_get_or_put(int32_t sock_fd, uint32_t is_put, unsigned char *file_name);
 
 /**
  * @brief      Process the exec request for `ls` or `cd` or `chmod`.
  * 
- *
+ * @param[out] sock_fd   socket file descriptor from which the response is to be read
  * @param      command_string  The command string that must be executed and its reply sent.
+ * @param[out] data  	Pointer to the address where the transport as written the data buffer 
+ * 						which contains either the output of command, or contents of the file 
+ * 						that is being transferred. 
  *
  * @return     0 if execution was successful, else, -1.
  */
-int32_t process_exec(unsigned char *command_string);
+int32_t process_exec(int32_t sock_fd, unsigned char *command_string, char **data);
 #endif

@@ -137,7 +137,7 @@ int32_t process_exec(int32_t sock_fd, unsigned char *command_string, char **data
         ret = strstr(command_string, "get");
         if(!(ret - command_string))
         process_exec(sock_fd, 0, command_string);
-        
+        /* if starts with `l` --> either `ls` or local */
         else if(command_string[0]=='l')
         {
             /* determine whether command was local or remote, if command was `ls` it is remote else local */
@@ -190,6 +190,29 @@ int32_t process_exec(int32_t sock_fd, unsigned char *command_string, char **data
                 }
             }
         }
+        
+        else
+            /* doesn't start with `l` hence remote */
+            {
+                n = send_data(sock_fd, strlen(command_string), command_string);
+                if(n==0)
+                {
+                    n = receive_response(sock_fd, resp);
+                    if(resp[0])
+                    {
+                        n = receive_data(sock_fd, resp[1], *data);
+                        return n;
+                    }
+                    
+                    else
+                        /* remote 'ls' was a failure */
+                        return -1;
+                }
+                
+                else
+                    /* send command action was a failure */
+                    return n;
+            }
     }
         
 }
