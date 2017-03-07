@@ -123,5 +123,74 @@ int32_t process_get_or_put(int32_t sock_fd, uint32_t is_put, unsigned char *file
 
 }
 
-int32_t process_exec(unsigned char *command_string);
+int32_t process_exec(int32_t sock_fd, unsigned char *command_string, char **data)
+{
+    int32_t n, resp[2], buff_size;
+    FILE *fp;
+    /* determine what the command is */
+    /* if the command is put or get */
+    char *ret = strstr(command_string, "put");
+    if(!(ret - command_string))
+        process_exec(sock_fd, 1, command_string);
+    else
+    {
+        ret = strstr(command_string, "get");
+        if(!(ret - command_string))
+        process_exec(sock_fd, 0, command_string);
+        
+        else if(command_string[0]=='l')
+        {
+            /* determine whether command was local or remote, if command was `ls` it is remote else local */
+            ret = strstr(command_string, "ls");
+            if(!( ret - command_string ))
+            {
+                /* command is `ls` execute remotely */
+                n = send_data(sock_fd, strlen(command_string), command_string);
+                if(n==0)
+                {
+                    n = receive_response(sock_fd, resp);
+                    if(resp[0])
+                    {
+                        n = receive_data(sock_fd, resp[1], *data);
+                        return n;
+                    }
+                    
+                    else
+                        /* remote 'ls' was a failure */
+                        return -1;
+                }
+                
+                else
+                    /* send command action was a failure */
+                    return n;
+            }
+            
+            else
+            {
+                /* command is local */
+                fp = popen(command_string+1, "rb");
+                if(fp==NULL)
+                    /*local command run failed */
+                    return -1;
+                else
+                    /* write the output to data */
+                {
+                    /*find size of buffer*/
+                    fseek(fp, 0, 2);
+                    buff_size = ftell(fp);
+                    /* rewind to beginning */
+                    rewind(fp);
+                    n = fread(*data, 1, buff_size, fp);
+                    if(n==buff_size)
+                        /* elements read succesfully */
+                        return n;
+                    else
+                        /*failed to read into data*/
+                        return -1;
+                }
+            }
+        }
+    }
+        
+}
  
