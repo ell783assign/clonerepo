@@ -188,6 +188,19 @@ typedef struct msg_put
 }MSG_PUT;
 
 
+typedef union msg_gen
+{
+	MSG_HDR hdr;
+	MSG_CD cd;
+	MSG_LS ls;
+	MSG_GET get;
+	MSG_PUT put;
+	MSG_CHMOD chmod;
+}MSG_GEN;
+
 int32_t read_file_to_buffer(char *name, char **msg_buf, int32_t *length);
 int32_t write_file_to_disk(char *name, char *msg_buf, int32_t length);
+int32_t send_data(int32_t, uint32_t, char *);
+int32_t receive_data(int32_t, uint32_t, char *);
+
 #endif

@@ -1,4 +1,5 @@
 #include <utils.h>
+#include <cli_interface.h>
 int32_t init_transport_connections(uint32_t);
 
 #define NUM_QUEUED_CONNECTIONS		5
@@ -111,6 +112,7 @@ int32_t main(int32_t argc, char *argv[])
 				{
 					/* TODO: Read data */
 					TRACE("Data on connection socket.\n");
+					ret_val = handle_incoming_data(connection_fds[next_available_fd_slot].sock_fd);
 				}
 			}
 		}
@@ -154,4 +156,78 @@ int32_t init_transport_connections(uint32_t bind_port)
 	TRACE("Listening...\n");
 
 	return(sock_fd);
+}
+
+int32_t handle_incoming_data(int32_t sock_fd)
+{
+	int32_t ret_val = 0;
+
+	int32_t num_reads = 0;
+
+	char *msg; 
+	uint32_t length;
+	uint32_t response_length = sizeof(MSG_HDR);
+
+	MSG_GEN *gen=NULL;
+
+	MSG_HDR *hdr = (MSG_HDR *)malloc(sizeof(MSG_HDR));
+	if(!hdr)
+	{
+		LOG_EXCEPTION("Error allocating buffer for message header.", 0, NEQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;
+	}
+
+	ret_val = receive_data(sock_fd, sizeof(MSG_HDR), (char *)hdr);
+	if(ret_val != 0)
+	{
+		LOG_EXCEPTION("Error allocating buffer for message header.", ret_val, EQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;	
+	}
+
+	switch(hdr->cmd)
+	{
+		case LS:
+			ret_val = do_lls(&length, &msg);
+			if(ret_val != 0)
+			{
+				response_length += length;
+			}
+			break;
+		case CD:
+			ret_val = do_lcd(&length, &msg);
+			if(ret_val != 0)
+			{
+				response_length += length;
+			}
+			break;
+		case CHMOD:
+			ret_val = do_lchmod(&length, &msg);
+			if(ret_val != 0)
+			{
+				response_length += length+(sizeof(uint8_t)*3);
+			}
+			break;
+		case GET:
+			ret_val = handle_get(&length, &msg);
+			response_length += length;
+			break;
+
+		case PUT:
+			ret_val = handle_put(&length, &msg);
+			if(ret_val != 0)
+			{
+				response_length += length;
+			}
+			break;
+		default:
+			LOG_EXCEPTION("Unknown command!", 0, NEQ, 0, FALSE);
+	}
+	free(msg);
+
+	
+
+EXIT_LABEL:
+	return(ret_val);
 }
