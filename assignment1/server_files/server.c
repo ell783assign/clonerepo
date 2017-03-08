@@ -3,7 +3,7 @@
 int32_t init_transport_connections(uint32_t);
 
 int32_t handle_incoming_data(int32_t );
-int32_t handle_put(char *, char *, uint32_t *, char **);
+int32_t handle_put(char *, char *, int32_t, uint32_t *, char **);
 int32_t handle_get(char *, uint32_t *, char **);
 
 #define NUM_QUEUED_CONNECTIONS		5
@@ -104,19 +104,20 @@ int32_t main(int32_t argc, char *argv[])
 				FD_SET(connection_fds[next_available_fd_slot].sock_fd, &persistent_set);
 
 				TRACE("New connection accepted on descriptor: %d\n",connection_fds[next_available_fd_slot].sock_fd);
-				next_available_fd_slot++;
 				if(max_fd<connection_fds[next_available_fd_slot].sock_fd)
 				{
+					TRACE("Update max_fd to %d\n",connection_fds[next_available_fd_slot].sock_fd);
 					max_fd = connection_fds[next_available_fd_slot].sock_fd;
 				}
+				next_available_fd_slot++;
 			}
 			for(ii=0;ii<MAX_CONNECTIONS;ii++)
 			{
-				if(FD_ISSET(connection_fds[next_available_fd_slot].sock_fd, &fds))
+				if(connection_fds[ii].sock_fd > 0 && FD_ISSET(connection_fds[ii].sock_fd, &fds))
 				{
 					/* TODO: Read data */
 					TRACE("Data on connection socket.\n");
-					ret_val = handle_incoming_data(connection_fds[next_available_fd_slot].sock_fd);
+					ret_val = handle_incoming_data(connection_fds[ii].sock_fd);
 				}
 			}
 		}
@@ -136,6 +137,7 @@ int32_t main(int32_t argc, char *argv[])
 int32_t init_transport_connections(uint32_t bind_port)
 {
 	int32_t ret_val;
+	int32_t rebind;
 
 	int32_t sock_fd;	/**< Listen Socket FD */
 	struct sockaddr_in server_address; /**< Server Listen Address */
@@ -144,6 +146,9 @@ int32_t init_transport_connections(uint32_t bind_port)
 	sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 	EXIT_ON_ERROR("Could not open stream socket.", sock_fd, GTE, 0, TRUE);
 
+	rebind = 1;
+	ret_val = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &rebind, sizeof(int));
+	EXIT_ON_ERROR("Could not set SO_REUSEADDR", ret_val, EQ, 0,TRUE);
 
 	/* Setup address to bind to */
 	memset(&server_address, 0, sizeof(struct sockaddr));
@@ -188,9 +193,14 @@ int32_t handle_incoming_data(int32_t sock_fd)
 	}
 
 	ret_val = receive_data(sock_fd, sizeof(MSG_HDR), (char *)hdr);
-	if(ret_val != 0)
+	if(ret_val != sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error allocating buffer for message header.", ret_val, EQ, 0, FALSE);
+		LOG_EXCEPTION("Error receiving message header.", ret_val, EQ, sizeof(MSG_HDR), FALSE);
+		if(ret_val == 0)
+		{
+			close(sock_fd);
+			goto EXIT_LABEL;
+		}
 		ret_val = -1;
 		goto EXIT_LABEL;	
 	}
@@ -202,14 +212,20 @@ int32_t handle_incoming_data(int32_t sock_fd)
 		LOG_EXCEPTION("Error allocating buffer for message body.", 0, NEQ, 0, FALSE);
 		ret_val = -1;
 		goto EXIT_LABEL;
-	}	
+	}
+	memset(gen, 0, sizeof(char)*hdr->length);
 
 	/* Align pointer to receive rest of data */
 	request = (char *)((char *)gen + sizeof(MSG_HDR));
 	ret_val = receive_data(sock_fd, hdr->length - sizeof(MSG_HDR), (char *)request);
-	if(ret_val != 0)
+	if(ret_val != hdr->length - sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error allocating buffer for message header.", ret_val, EQ, 0, FALSE);
+		LOG_EXCEPTION("Could not read all data.", ret_val, EQ, hdr->length - sizeof(MSG_HDR), FALSE);
+		if(ret_val == 0)
+		{
+			close(sock_fd);
+			goto EXIT_LABEL;
+		}
 		ret_val = -1;
 		goto EXIT_LABEL;	
 	}
@@ -217,20 +233,14 @@ int32_t handle_incoming_data(int32_t sock_fd)
 	switch(hdr->cmd)
 	{
 		case LS:
+			TRACE("ls\n");
 			ret_val = do_lls(&length, &msg);
-			if(ret_val != 0)
-			{
-				response_length += length;
-			}
 			break;
 		case CD:
 			ret_val = do_lcd(request, &length, &msg);
-			if(ret_val != 0)
-			{
-				response_length += length;
-			}
 			break;
 		case CHMOD:
+			TRACE("chmod\n");
 
 			perm[0] = 0 | gen->chmod.perms[0];
 			perm[1] = 0 | gen->chmod.perms[1];
@@ -238,18 +248,15 @@ int32_t handle_incoming_data(int32_t sock_fd)
 
 			request = (char *)(gen->chmod.comn.data);
 			ret_val = do_lchmod(perm, request, &length, &msg);
-			if(ret_val != 0)
-			{
-				response_length += length+(sizeof(uint8_t)*3);
-			}
 			break;
 
 		case GET:
+			TRACE("get\n");
 			ret_val = handle_get(request, &length, &msg);
-			response_length += length;
 			break;
 
 		case PUT:
+			TRACE("put\n");
 			filename = (char *)malloc(sizeof(char) * gen->put.file_name_len);
 			if(!filename)
 			{
@@ -259,16 +266,55 @@ int32_t handle_incoming_data(int32_t sock_fd)
 			}
 			strncpy(filename, gen->put.comn.data, gen->put.file_name_len);
 			request = 	(char *)(gen->put.comn.data + gen->put.file_name_len);			
-			ret_val = handle_put(filename, request, &length, &msg);
-			if(ret_val != 0)
-			{
-				response_length += length;
-			}
+			ret_val = handle_put(filename, request, hdr->length -  gen->put.file_name_len - sizeof(MSG_HDR), &length, &msg);
 			break;
 		default:
 			LOG_EXCEPTION("Unknown command!", 0, NEQ, 0, FALSE);
 	}
-	free(msg);
+	/* Construct response */
+	if(ret_val != 0)
+	{
+		TRACE("%s", msg);
+	}
+	response_length += length;
+
+	free(gen);
+	gen = NULL;
+	gen = (MSG_GEN *)malloc(sizeof(char)*response_length);
+	if(!gen)
+	{
+		LOG_EXCEPTION("Error allocating buffer for response.", 0, NEQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;
+	}		
+	memcpy((char *)gen, (char *)hdr, sizeof(MSG_HDR));
+	gen->hdr.response = (ret_val ==0) ? 1: 0;
+	gen->hdr.is_request = FALSE;
+	gen->hdr.length = response_length;
+
+	if(ret_val == 0 && length > sizeof(MSG_HDR))
+	{
+		/* should be copying in case of ls and get */
+		TRACE("copy response\n");
+		memcpy(gen->get.comn.data, msg, length);
+	}
+	else if(ret_val != 0)
+	{
+		/* Fill in error */
+		memcpy(gen->get.comn.data, msg, length);	
+	}
+	/* Send response */
+	ret_val = send_data(sock_fd, gen->hdr.length, (char *)gen);
+	if(ret_val!=gen->hdr.length)
+	{
+		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, gen->hdr.length , FALSE);
+		goto EXIT_LABEL;
+	}
+	free(gen);
+	if(length > 0)
+	{
+		free(msg);
+	}
 
 	
 
@@ -278,18 +324,32 @@ EXIT_LABEL:
 
 int32_t handle_get(char *filename, uint32_t *length, char **msg)
 {
+	TRACE("%s\n", filename);
 	int32_t ret_val = 0;
+
+	ret_val = read_file_to_buffer(filename, msg, length);
+	if(ret_val!=0)
+	{
+		LOG_EXCEPTION("Could not read file.", ret_val, EQ, 0, FALSE);
+		ret_val = -1;
+		goto EXIT_LABEL;
+	}
 
 
 EXIT_LABEL:
 	return(ret_val);	
 }
 
-int32_t handle_put(char *filename, char *contents, uint32_t *length, char **msg)
+int32_t handle_put(char *filename, char *contents, int32_t file_length, uint32_t *length, char **msg)
 {
 	int32_t ret_val = 0;
 
-
+	ret_val = write_file_to_disk(filename, contents, file_length);
+	if(ret_val!=0)
+	{
+		LOG_EXCEPTION("Error writing to disk",ret_val, EQ, 0, FALSE);	
+		goto EXIT_LABEL;
+	}
 EXIT_LABEL:
 	return(ret_val);	
 }

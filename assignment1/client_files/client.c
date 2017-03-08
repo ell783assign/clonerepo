@@ -53,6 +53,9 @@ int32_t main(int32_t argc, char *argv[])
 	while(TRUE)
 	{	
 		printf("ftp>");
+
+		memset(userinput, 0, sizeof(userinput));
+		memset(cmdargs, 0, sizeof(cmdargs));
 		if(alt_gets(userinput)!=0)
 		{
 			EXIT_ON_ERROR("Could not parse input.", 0, NEQ, 0, FALSE);
@@ -222,15 +225,15 @@ int32_t do_ls(uint32_t *length, char **cmd_msg)
 	msg->hdr.length = sizeof(MSG_LS);
 
 	ret_val = send_data(sock_fd, sizeof(MSG_LS), (char *)msg);
-	if(ret_val!=0)
+	if(ret_val!=sizeof(MSG_LS))
 	{
-		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, 0, FALSE);
+		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, sizeof(MSG_LS), FALSE);
 		goto EXIT_LABEL;
 	}
 
 	memset(msg, 0, sizeof(MSG_LS));
 	ret_val = receive_data(sock_fd, sizeof(MSG_HDR), (char *)msg);
-	if(ret_val!=0)
+	if(ret_val!=sizeof(MSG_HDR))
 	{
 		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
 		goto EXIT_LABEL;
@@ -247,9 +250,9 @@ int32_t do_ls(uint32_t *length, char **cmd_msg)
 
 	/* Receive all data from socket anyway, even if we have to discard it. */
 	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), (char *)ls_result);
-	if(ret_val!=0)
+	if(ret_val!=msg->hdr.length - sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, msg->hdr.length - sizeof(MSG_HDR), FALSE);	
 		goto EXIT_LABEL;
 	}
 	comn_msg = (MSG_COMN *)ls_result;
@@ -290,6 +293,7 @@ EXIT_LABEL:
 
 int32_t do_cd(char *path, uint32_t *length, char **cmd_msg)
 {
+	TRACE("%s\n", path);
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
 
@@ -305,7 +309,7 @@ int32_t do_cd(char *path, uint32_t *length, char **cmd_msg)
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
-	memset(msg, 0, sizeof(MSG_LS));
+	memset(msg, 0, sizeof(MSG_LS)+ strlen(path));
 
 	msg->hdr.cmd = CD;
 	msg->hdr.is_request = TRUE;
@@ -315,39 +319,40 @@ int32_t do_cd(char *path, uint32_t *length, char **cmd_msg)
 	strncpy(msg->comn.data, path, strlen(path));
 
 	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
-	if(ret_val!=0)
+	if(ret_val!=msg->hdr.length)
 	{
-		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, 0 , FALSE);
+		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, msg->hdr.length , FALSE);
 		goto EXIT_LABEL;
 	}
-	free(msg);
 
 	memset(msg, 0, sizeof(MSG_CD));
 	ret_val = receive_data(sock_fd, sizeof(MSG_HDR), (char *)msg);
-	if(ret_val!=0)
+	if(ret_val!=sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, sizeof(MSG_HDR), FALSE);	
 		goto EXIT_LABEL;
 	}
 
 	/* Some response was received. */
-	ls_result = (char *)malloc(msg->hdr.length - sizeof(MSG_HDR));
-	if(!ls_result)
+	if(msg->hdr.length - sizeof(MSG_HDR) >0)
 	{
-		LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
-		ret_val = -1;
-		goto EXIT_LABEL;	
-	}
+		ls_result = (char *)malloc(msg->hdr.length - sizeof(MSG_HDR));
+		if(!ls_result)
+		{
+			LOG_EXCEPTION("Error allocating buffers.",0, NEQ, 0, FALSE);
+			ret_val = -1;
+			goto EXIT_LABEL;	
+		}
 
-	/* Receive all data from socket anyway, even if we have to discard it. */
-	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), (char *)ls_result);
-	if(ret_val!=0)
-	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
-		goto EXIT_LABEL;
+		/* Receive all data from socket anyway, even if we have to discard it. */
+		ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), (char *)ls_result);
+		if(ret_val!=msg->hdr.length - sizeof(MSG_HDR))
+		{
+			LOG_EXCEPTION("Error receiving response",ret_val, EQ, msg->hdr.length - sizeof(MSG_HDR), FALSE);	
+			goto EXIT_LABEL;
+		}
+		comn_msg = (MSG_COMN*)ls_result;
 	}
-	comn_msg = (MSG_COMN*)ls_result;
-
 	if(!msg->hdr.is_request && !(msg->hdr.response == 1))
 	{
 		if(!msg->hdr.is_request)
@@ -408,18 +413,17 @@ int32_t do_chmod(int32_t perm[3], char *path, uint32_t *length, char **cmd_msg)
 	strncpy(msg->comn.data, path, strlen(path));
 
 	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
-	if(ret_val!=0)
+	if(ret_val!=msg->hdr.length)
 	{
-		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, sizeof(MSG_LS), FALSE);
+		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, msg->hdr.length, FALSE);
 		goto EXIT_LABEL;
 	}
-	free(msg);
 
 	memset(msg, 0, sizeof(MSG_CD));
 	ret_val = receive_data(sock_fd, sizeof(MSG_HDR),(char *) msg);
-	if(ret_val!=0)
+	if(ret_val!=sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, sizeof(MSG_HDR), FALSE);	
 		goto EXIT_LABEL;
 	}
 
@@ -434,9 +438,9 @@ int32_t do_chmod(int32_t perm[3], char *path, uint32_t *length, char **cmd_msg)
 
 	/* Receive all data from socket anyway, even if we have to discard it. */
 	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), (char *)ls_result);
-	if(ret_val!=0)
+	if(ret_val!=msg->hdr.length - sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, msg->hdr.length - sizeof(MSG_HDR), FALSE);	
 		goto EXIT_LABEL;
 	}
 	/* Align pointer to read error message if any */
@@ -504,13 +508,13 @@ int32_t do_put(char *file_name, uint32_t *length, char **err_msg_ptr)
 	msg->hdr.response = 0;
 	msg->hdr.length = sizeof(MSG_PUT)+ strlen(file_name) + len;
 
-	msg->file_name_len = strlen(file_name)+1;
-	snprintf(msg->comn.data, strlen(file_name), "%s", file_name);
+	msg->file_name_len = strlen(file_name);
+	snprintf(msg->comn.data, strlen(file_name)+1, "%s", file_name);
 
 	memcpy((char *)msg->comn.data + strlen(file_name)+1, msg, len);
 
 	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
-	if(ret_val!=0)
+	if(ret_val!=msg->hdr.length)
 	{
 		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, sizeof(MSG_LS), FALSE);
 		goto EXIT_LABEL;
@@ -518,9 +522,9 @@ int32_t do_put(char *file_name, uint32_t *length, char **err_msg_ptr)
 
 	memset(msg, 0, sizeof(MSG_PUT));
 	ret_val = receive_data(sock_fd, sizeof(MSG_HDR), (char *)msg);
-	if(ret_val!=0)
+	if(ret_val!=sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, sizeof(MSG_HDR), FALSE);	
 		goto EXIT_LABEL;
 	}
 
@@ -535,9 +539,9 @@ int32_t do_put(char *file_name, uint32_t *length, char **err_msg_ptr)
 
 	/* Receive all data from socket anyway, even if we have to discard it. */
 	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), (char *)ls_result);
-	if(ret_val!=0)
+	if(ret_val!=msg->hdr.length - sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, msg->hdr.length - sizeof(MSG_HDR), FALSE);	
 		goto EXIT_LABEL;
 	}
 	/* Align pointer to read error message if any */
@@ -575,7 +579,7 @@ int32_t do_get(char *file_name, uint32_t *length, char **err_msg_ptr)
 	char *ls_result = NULL;
 	MSG_COMN *comn_msg = NULL;
 
-	msg = (MSG_GET *)malloc(sizeof(MSG_GET)+ strlen(file_name));
+	msg = (MSG_GET *)malloc(sizeof(MSG_GET)+ strlen(file_name)+1);
 	if(!msg)
 	{
 		LOG_EXCEPTION("Error allocating transport buffer.", 0, NEQ, 0, FALSE);
@@ -583,23 +587,25 @@ int32_t do_get(char *file_name, uint32_t *length, char **err_msg_ptr)
 		goto EXIT_LABEL;
 	}
 
-	msg->hdr.cmd = PUT;
+	msg->hdr.cmd = GET;
 	msg->hdr.is_request = TRUE;
 	msg->hdr.response = 0;
-	msg->hdr.length = sizeof(MSG_PUT)+ strlen(file_name);
+	msg->hdr.length = sizeof(MSG_GET)+ strlen(file_name);
 
-	snprintf(msg->comn.data, strlen(file_name), "%s", file_name);
+	snprintf(msg->comn.data, strlen(file_name)+1, "%s", file_name);
 
 	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
+	if(ret_val != msg->hdr.length)
 	{
-		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, sizeof(MSG_LS), FALSE);
+		LOG_EXCEPTION("Error sending data to server.", ret_val, EQ, msg->hdr.length, FALSE);
 		goto EXIT_LABEL;
 	}
 
 	memset(msg, 0, sizeof(MSG_GET));
 	ret_val = receive_data(sock_fd, sizeof(MSG_HDR), (char *)msg);
+	if(ret_val != sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, sizeof(MSG_HDR), FALSE);	
 		goto EXIT_LABEL;
 	}
 
@@ -614,13 +620,13 @@ int32_t do_get(char *file_name, uint32_t *length, char **err_msg_ptr)
 
 	/* Receive all data from socket anyway, even if we have to discard it. */
 	ret_val = receive_data(sock_fd, msg->hdr.length - sizeof(MSG_HDR), (char *)ls_result);
-	if(ret_val!=0)
+	if(ret_val!=msg->hdr.length - sizeof(MSG_HDR))
 	{
-		LOG_EXCEPTION("Error receiving response",ret_val, EQ, 0, FALSE);	
+		LOG_EXCEPTION("Error receiving response",ret_val, EQ, msg->hdr.length - sizeof(MSG_HDR), FALSE);	
 		goto EXIT_LABEL;
 	}
 	/* Align pointer to read error message if any */
-	comn_msg = (MSG_COMN*)((unsigned char *)ls_result + sizeof(uint32_t));
+	comn_msg = (MSG_COMN*)((unsigned char *)ls_result);
 
 	if(!(msg->hdr.is_request) && !(msg->hdr.response == 1))
 	{
@@ -636,7 +642,7 @@ int32_t do_get(char *file_name, uint32_t *length, char **err_msg_ptr)
 	}
 	/* else get command was successful. Save into file */
 	/* Don't need to send back the file name */
-	ret_val = write_file_to_disk(file_name, (char *)comn_msg, msg->hdr.length - sizeof(MSG_PUT)+1);
+	ret_val = write_file_to_disk(file_name, (char *)comn_msg, msg->hdr.length - sizeof(MSG_HDR));
 	if(ret_val!=0)
 	{
 		LOG_EXCEPTION("Error writing to disk",ret_val, EQ, 0, FALSE);	

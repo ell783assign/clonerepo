@@ -27,12 +27,14 @@ int32_t read_file_to_buffer(char *name, char **msg_buf, int32_t *length)
 {
 	int32_t ret_val = 0;
 
-	uint32_t size_of_file = 0;
+	int32_t size_of_file = 0;
 	char *buffer = NULL;
+	int32_t len_read = 0;
 
 	FILE *fp = fopen(name, "rb");
 	if(fp==NULL)
 	{
+		WARN("Could not open file.\n");
 		LOG_EXCEPTION("Could not open file. Does it exist?", 0, NEQ, 0, TRUE);
 		ret_val = -1;
 		goto EXIT_LABEL;
@@ -44,21 +46,30 @@ int32_t read_file_to_buffer(char *name, char **msg_buf, int32_t *length)
 	/* Go back */
 	fseek(fp, 0L, SEEK_SET);
 
+	if(size_of_file <= 0)
+	{
+		WARN("Invalid file size\n");
+	}
+	TRACE("File size %d\n", size_of_file);
 	buffer = (char *)malloc(sizeof(char)*size_of_file);
 	if(buffer==NULL)
 	{
+		WARN("Could not allocate buffer\n");
 		LOG_EXCEPTION("Could not allocate sufficient buffer.", 0, NEQ, 0, FALSE);
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
-	*length = fread(buffer, sizeof(unsigned char), size_of_file, fp);
+	len_read = fread(buffer, sizeof(unsigned char), size_of_file,  fp);
+	if(len_read != size_of_file)
 	{
-		LOG_EXCEPTION("Could not completely write into buffer.", *length, EQ, size_of_file, FALSE);
+		WARN("Could not read file.\n");
+		LOG_EXCEPTION("Could not completely write into buffer.", len_read, EQ, size_of_file, TRUE);
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
 	/* Otherwise we have successfully written data. */
 	*msg_buf = buffer;
+	*length = len_read;
 
 EXIT_LABEL:
 	if(fp)
@@ -71,6 +82,7 @@ EXIT_LABEL:
 
 int32_t write_file_to_disk(char *name, char *msg_buf, int32_t length)
 {
+	TRACE("length %d\n", length);
 	int32_t ret_val = 0;
 	int32_t size_written = 0;
 
@@ -82,7 +94,8 @@ int32_t write_file_to_disk(char *name, char *msg_buf, int32_t length)
 		goto EXIT_LABEL;
 	}
 
-	size_written = fwrite(msg_buf, sizeof(char), length, fp);
+	size_written = fwrite(msg_buf, sizeof(char), length,  fp);
+	if(size_written != length)
 	{
 		LOG_EXCEPTION("Could not completely write into file.", size_written, EQ, length, FALSE);
 		ret_val = -1;
@@ -102,6 +115,7 @@ int32_t send_data(int32_t sock_fd, uint32_t length, char *buf)
 	int32_t num_writes = 0;
 
 	num_writes = send(sock_fd, buf, length, 0);
+	if(num_writes!= length)
 	{
 		LOG_EXCEPTION("Could not send all data.", num_writes, EQ, length, TRUE);
 		num_writes = -1;
@@ -114,9 +128,13 @@ int32_t receive_data(int32_t sock_fd, uint32_t length, char *buf)
 	int32_t num_reads = 0;
 
 	num_reads = recv(sock_fd, buf, length, 0);
+	if(num_reads!=length)
 	{
-		LOG_EXCEPTION("Could not read all data.", num_reads, EQ, length, TRUE);
-		num_reads = -1;
+		if(num_reads!=0)
+		{
+			LOG_EXCEPTION("Could not read all data.", num_reads, EQ, length, TRUE);
+			num_reads = -1;
+		}
 	}
 	return(num_reads);	
 }
@@ -124,7 +142,6 @@ int32_t receive_data(int32_t sock_fd, uint32_t length, char *buf)
 
 int32_t do_lls(uint32_t *length, char **msg)
 {
-	TRACE("enter do_lls\n");
 	int32_t ret_val = 0;
 
 	char *return_buffer = (char *)malloc(sizeof(char) * 1024);
@@ -183,12 +200,12 @@ int32_t do_lls(uint32_t *length, char **msg)
 	*length = run_length+1;/*1 for NULL character */
 
 EXIT_LABEL:
-	TRACE("exit do_lls\n");
 	return 	(ret_val);
 }
 
 int32_t do_lcd(char *path, uint32_t *length, char **msg)
 {
+	TRACE("cd %s\n", path);
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
 
@@ -203,6 +220,12 @@ int32_t do_lcd(char *path, uint32_t *length, char **msg)
 		}
 		sprintf(err_msg, "Error occurred while changing directory.");
 		*msg = err_msg;
+		*length = strlen(err_msg)+1;
+	}
+	else
+	{
+		*length = 0;
+		*msg = NULL;
 	}
 
 	return(ret_val);
@@ -233,7 +256,14 @@ int32_t do_lchmod(int32_t perm[3], char * f_name, uint32_t *length, char **msg)
 		err_msg = (char *)malloc(sizeof(char)*512);
 		sprintf(err_msg, "Error while changing permissions.\n");
 		*msg = err_msg;
+		*length = strlen(err_msg)+1;
 	}
+	else
+	{
+		*length = 0;
+		*msg = NULL;
+	}
+	
 
 	return (ret_val);
 }

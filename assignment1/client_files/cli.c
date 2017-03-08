@@ -11,6 +11,7 @@ void printdiagnosticmsg(char **msg)
 
 int cmdnum(char *cmd)
 {	
+	TRACE("%s\n", cmd);
 	if(strcmp("lls",cmd)==0)
 		return 4;	
 	if(strcmp("ls",cmd)==0)
