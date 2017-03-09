@@ -148,6 +148,7 @@ int32_t receive_data(int32_t sock_fd, uint32_t length, char *buf)
 		else if(bytes_read==0)
 		{
 			LOG_EXCEPTION("Peer disconnected.", bytes_read, EQ, length, FALSE);
+			num_reads = 0;
 			break;
 		}
 		num_reads += bytes_read;

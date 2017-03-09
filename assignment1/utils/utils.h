@@ -123,7 +123,6 @@ EXIT_LABEL:
 			{
 				perror("Diagnostic");
 			}
-			exit(0);
 		}
 	}
 

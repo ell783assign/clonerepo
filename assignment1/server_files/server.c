@@ -9,6 +9,13 @@ int32_t handle_get(char *, uint32_t *, char **);
 #define NUM_QUEUED_CONNECTIONS		5
 #define MAX_CONNECTIONS				10
 
+enum ret_codes
+{
+	OK = 0,
+	CLOSED = 1,
+
+	__MAX_RET_CODE__
+};
 
 /**
  * A single connection instance
@@ -118,6 +125,20 @@ int32_t main(int32_t argc, char *argv[])
 					/* TODO: Read data */
 					TRACE("Data on connection socket.\n");
 					ret_val = handle_incoming_data(connection_fds[ii].sock_fd);
+					if(ret_val != OK)
+					{
+						if(ret_val == CLOSED)
+						{
+							TRACE("Remove socket from descriptor set\n");
+							FD_CLR(connection_fds[ii].sock_fd, &persistent_set);
+							close(connection_fds[ii].sock_fd);
+							connection_fds[ii].sock_fd = -1;
+						}
+						else
+						{
+							break;
+						}
+					}
 				}
 			}
 		}
@@ -199,7 +220,7 @@ int32_t handle_incoming_data(int32_t sock_fd)
 		if(ret_val == 0)
 		{
 			TRACE("Connection Closed by remote entity\n");
-			close(sock_fd);
+			ret_val = CLOSED;
 			goto EXIT_LABEL;
 		}
 		ret_val = -1;
@@ -226,7 +247,7 @@ int32_t handle_incoming_data(int32_t sock_fd)
 		if(ret_val == 0)
 		{
 			TRACE("Connection Closed by remote entity\n");
-			close(sock_fd);
+			ret_val = CLOSED;
 			goto EXIT_LABEL;
 		}
 		ret_val = -1;
