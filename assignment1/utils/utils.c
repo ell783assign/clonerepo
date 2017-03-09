@@ -113,12 +113,19 @@ EXIT_LABEL:
 int32_t send_data(int32_t sock_fd, uint32_t length, char *buf)
 {
 	int32_t num_writes = 0;
+	int32_t bytes_sent = 0;
 
-	num_writes = send(sock_fd, buf, length, 0);
-	if(num_writes!= length)
+	while(num_writes!= length)
 	{
-		LOG_EXCEPTION("Could not send all data.", num_writes, EQ, length, TRUE);
-		num_writes = -1;
+		buf = buf + bytes_sent;
+		bytes_sent = send(sock_fd, buf, length - num_writes, 0);
+		if(bytes_sent < 0)
+		{
+			LOG_EXCEPTION("Could not send all data.", num_writes, EQ, length, TRUE);
+			num_writes = -1;
+			break;
+		}
+		num_writes += bytes_sent;
 	}
 	return(num_writes);
 }
@@ -126,15 +133,24 @@ int32_t send_data(int32_t sock_fd, uint32_t length, char *buf)
 int32_t receive_data(int32_t sock_fd, uint32_t length, char *buf)
 {
 	int32_t num_reads = 0;
+	int32_t bytes_read = 0;
 
-	num_reads = recv(sock_fd, buf, length, 0);
-	if(num_reads!=length)
+	while(num_reads != length)
 	{
-		if(num_reads!=0)
+		buf = buf+bytes_read;
+		bytes_read = recv(sock_fd, buf, length - num_reads, 0);
+		if(bytes_read< 0)
 		{
 			LOG_EXCEPTION("Could not read all data.", num_reads, EQ, length, TRUE);
 			num_reads = -1;
+			break;
 		}
+		else if(bytes_read==0)
+		{
+			LOG_EXCEPTION("Peer disconnected.", bytes_read, EQ, length, FALSE);
+			break;
+		}
+		num_reads += bytes_read;
 	}
 	return(num_reads);	
 }
@@ -243,11 +259,15 @@ int32_t do_lchmod(int32_t perm[3], char * f_name, uint32_t *length, char **msg)
 
 	stat(f_name, &file_stats);
 
+	TRACE("permissions: %d%d%d\n", perm[0],perm[1],perm[2]);
 	
-	mode = file_stats.st_mode & 0x7777;
-
-	mask = 0x0000 | perm[0]<<16 | perm[1]<<8 | perm[2];
+	TRACE("Old Mode: %d\n", file_stats.st_mode);
+	mode = file_stats.st_mode & ~511;
+	TRACE("Old Mode: %d\n", mode);
+	mask = 0x0000 | perm[0]<<6 | perm[1]<<3 | perm[2];
+	TRACE("Mask: %d\n", mask);
 	mode = mode | mask;
+	TRACE("New Mode: %d\n", mode);
 	
 	ret_val = chmod(f_name, mode);
 	if(ret_val!=0)

@@ -20,7 +20,7 @@
 
 int32_t alt_gets(char *);
 
-#define TRACE(...) 	fprintf(stderr, "TRACE  \t"__VA_ARGS__)
+#define TRACE(...) 	fprintf(stderr, "TRACE  \t" __VA_ARGS__)
 #define WARN(...) 	fprintf(stderr, "WARNING\t"__VA_ARGS__)
 #define ERROR(...)  fprintf(stderr, "ERROR  \t"__VA_ARGS__)
 

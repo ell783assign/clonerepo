@@ -198,12 +198,14 @@ int32_t handle_incoming_data(int32_t sock_fd)
 		LOG_EXCEPTION("Error receiving message header.", ret_val, EQ, sizeof(MSG_HDR), FALSE);
 		if(ret_val == 0)
 		{
+			TRACE("Connection Closed by remote entity\n");
 			close(sock_fd);
 			goto EXIT_LABEL;
 		}
 		ret_val = -1;
 		goto EXIT_LABEL;	
 	}
+	TRACE("Received Header\n");
 
 	/* receive the rest of data too. */
 	gen = (MSG_GEN *)malloc(sizeof(char)*hdr->length);
@@ -223,6 +225,7 @@ int32_t handle_incoming_data(int32_t sock_fd)
 		LOG_EXCEPTION("Could not read all data.", ret_val, EQ, hdr->length - sizeof(MSG_HDR), FALSE);
 		if(ret_val == 0)
 		{
+			TRACE("Connection Closed by remote entity\n");
 			close(sock_fd);
 			goto EXIT_LABEL;
 		}
@@ -235,9 +238,12 @@ int32_t handle_incoming_data(int32_t sock_fd)
 		case LS:
 			TRACE("ls\n");
 			ret_val = do_lls(&length, &msg);
+			TRACE("ls completed\n");
 			break;
 		case CD:
+			TRACE("cd\n");
 			ret_val = do_lcd(request, &length, &msg);
+			TRACE("cd completed\n");
 			break;
 		case CHMOD:
 			TRACE("chmod\n");
@@ -248,11 +254,13 @@ int32_t handle_incoming_data(int32_t sock_fd)
 
 			request = (char *)(gen->chmod.comn.data);
 			ret_val = do_lchmod(perm, request, &length, &msg);
+			TRACE("chmod completed\n");
 			break;
 
 		case GET:
 			TRACE("get\n");
 			ret_val = handle_get(request, &length, &msg);
+			TRACE("get completed\n");
 			break;
 
 		case PUT:
@@ -266,7 +274,8 @@ int32_t handle_incoming_data(int32_t sock_fd)
 			}
 			strncpy(filename, gen->put.comn.data, gen->put.file_name_len);
 			request = 	(char *)(gen->put.comn.data + gen->put.file_name_len);			
-			ret_val = handle_put(filename, request, hdr->length -  gen->put.file_name_len - sizeof(MSG_HDR), &length, &msg);
+			ret_val = handle_put(filename, request, hdr->length -  sizeof(uint32_t) - gen->put.file_name_len - sizeof(MSG_HDR) - sizeof(MSG_COMN), &length, &msg);
+			TRACE("put completed\n");
 			break;
 		default:
 			LOG_EXCEPTION("Unknown command!", 0, NEQ, 0, FALSE);
@@ -276,8 +285,9 @@ int32_t handle_incoming_data(int32_t sock_fd)
 	{
 		TRACE("%s", msg);
 	}
+	TRACE("Response length:%d\n", response_length);
 	response_length += length;
-
+	TRACE("New Response length:%d\n", response_length);
 	free(gen);
 	gen = NULL;
 	gen = (MSG_GEN *)malloc(sizeof(char)*response_length);
@@ -301,6 +311,7 @@ int32_t handle_incoming_data(int32_t sock_fd)
 	else if(ret_val != 0)
 	{
 		/* Fill in error */
+		TRACE("Fill in error info\n");
 		memcpy(gen->get.comn.data, msg, length);	
 	}
 	/* Send response */
@@ -343,13 +354,15 @@ EXIT_LABEL:
 int32_t handle_put(char *filename, char *contents, int32_t file_length, uint32_t *length, char **msg)
 {
 	int32_t ret_val = 0;
-
+	TRACE("File Name:%s\t Length: %d\n", filename, file_length);
 	ret_val = write_file_to_disk(filename, contents, file_length);
 	if(ret_val!=0)
 	{
 		LOG_EXCEPTION("Error writing to disk",ret_val, EQ, 0, FALSE);	
 		goto EXIT_LABEL;
 	}
+	*length = 0;
+	*msg = NULL;
 EXIT_LABEL:
 	return(ret_val);	
 }

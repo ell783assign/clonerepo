@@ -66,6 +66,10 @@ int32_t main(int32_t argc, char *argv[])
 			TRACE("No command entered.\n");
 			continue;
 		}
+		else
+		{
+			TRACE("Words found: %d\n", wordsfound);
+		}
 		result=99;
 		TRACE("%d\n",cmdnum(cmdargs[0]));
 		switch(cmdnum(cmdargs[0]))
@@ -494,7 +498,8 @@ int32_t do_put(char *file_name, uint32_t *length, char **err_msg_ptr)
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
-
+	TRACE("Read %d bytes file.\n", len);
+	TRACE("MSG HDR %ld\t File Name: %ld.", sizeof(MSG_HDR), strlen(file_name));
 	msg = (MSG_PUT *)malloc(sizeof(MSG_PUT)+ strlen(file_name) + len);
 	if(!msg)
 	{
@@ -511,7 +516,7 @@ int32_t do_put(char *file_name, uint32_t *length, char **err_msg_ptr)
 	msg->file_name_len = strlen(file_name);
 	snprintf(msg->comn.data, strlen(file_name)+1, "%s", file_name);
 
-	memcpy((char *)msg->comn.data + strlen(file_name)+1, msg, len);
+	memcpy((char *)msg->comn.data + strlen(file_name)+1, buf, len);
 
 	ret_val = send_data(sock_fd, msg->hdr.length, (char *)msg);
 	if(ret_val!=msg->hdr.length)

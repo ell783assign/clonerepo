@@ -40,6 +40,7 @@ int processthiscmd(char *userinput)
 	int i,k,nomorewords;
 
 	char *token;
+	char *end_of_quote;
 
 	if(strlen(userinput)==0)
 	{
@@ -55,25 +56,13 @@ int processthiscmd(char *userinput)
     strncpy(cmdargs[0], token, strlen(token));
 	wordsfoundintext++;
 
-    /* Try to find first parameter. It could open with a double quote */
-    token = strtok(NULL, "\"");
-    if(token!= NULL)
-    {
-    	/* Found, put the rest of things into argument 2. We can have no more args */
-		strncpy(cmdargs[1], token, strlen(token));
-		i=2;
-		wordsfoundintext++;
-		token = strtok(NULL, "\""); /* Skip the closing quote */
-    }
-    else
-    {
-    	i = 1;
-    }
-
+	i = 1;
 	while((token=strtok(NULL, " ")) != NULL)
 	{
-		strncpy(cmdargs[i], token, strlen(token));    			
+		strncpy(cmdargs[i], token, strlen(token));
+		TRACE("Found [%d]%s\n", i, cmdargs[i]);    			
 		wordsfoundintext++;
+		i++;
 	}
 
 EXIT_LABEL:
