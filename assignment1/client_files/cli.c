@@ -42,6 +42,8 @@ int processthiscmd(char *userinput)
 	char *token;
 	char *end_of_quote;
 
+	int32_t length_of_param = 0;
+
 	if(strlen(userinput)==0)
 	{
 		goto EXIT_LABEL;
@@ -59,10 +61,17 @@ int processthiscmd(char *userinput)
 	i = 1;
 	while((token=strtok(NULL, " ")) != NULL)
 	{
-		strncpy(cmdargs[i], token, strlen(token));
+		if(i<=2)
+		{
+			strncpy(cmdargs[i], token, strlen(token));
+			wordsfoundintext++;
+			i++;
+		}
+		else
+		{
+			strncat(cmdargs[2], token, strlen(token));
+		}
 		TRACE("Found [%d]%s\n", i, cmdargs[i]);    			
-		wordsfoundintext++;
-		i++;
 	}
 
 EXIT_LABEL:
