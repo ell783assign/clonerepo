@@ -123,7 +123,7 @@ int32_t main(int32_t argc, char *argv[])
 					close(child_fd);
 
 				}
-				else if(ret_val!=0)
+				else if(ret_val==0)
 				{
 					/* Inside child */
 					/* Close listen socket for child */
