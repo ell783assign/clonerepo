@@ -18,6 +18,8 @@
 
 #include <dirent.h>
 
+#include <sys/wait.h> 
+
 int32_t alt_gets(char *);
 
 #define TRACE(...) 	fprintf(stderr, "TRACE  \t" __VA_ARGS__)
