@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#define TRUE  		(uint32_t)1
+#define FALSE 		(uint32_t)0
 
 #define TRACE(...) 	fprintf(stderr, "TRACE  \t" __VA_ARGS__)
 #define WARN(...) 	fprintf(stderr, "WARNING\t"__VA_ARGS__)

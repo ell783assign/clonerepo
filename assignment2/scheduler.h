@@ -38,6 +38,8 @@ typedef struct circular_linked_list
 	(A).prev = NULL;							\
 	(A).next = NULL;			
 
+#define NEXT_IN_LIST(NODE)						\
+	(NODE.next->self)
 
 typedef struct reschedule_timing
 {
@@ -79,6 +81,9 @@ typedef struct _dispatch
 
 	CLL job_list_root;
 
+	char *file_name;
+
+
 	int32_t num_jobs_remaining;
 
 }DISPATCH;
@@ -86,6 +91,8 @@ typedef struct _dispatch
 typedef struct _clock_scheduler
 {
 	uint32_t ticks;
+
+	uint32_t signal_stop;
 
 }CLOCK_SCHEDULER;
 
@@ -146,7 +153,7 @@ typedef struct cfs
 
 typedef struct _job_scheduler
 {
-	uint32_t currently_selected_sched;
+	int32_t current_scheduler;
 
 	FCFS_SCHED fcfs;
 	SJF_SCHED sjf;
