@@ -73,6 +73,91 @@ typedef enum
 	__MAX_SCHEDULER_COUNT__
 }JOB_SCHEDULER;
 
+typedef struct _dispatch
+{
+	int32_t num_jobs;
+
+	JOB jobs_list_root;
+
+	int32_t num_jobs_remaining;
+
+}DISPATCH;
+
+typedef struct _clock_scheduler
+{
+	uint32_t ticks;
+
+}CLOCK_SCHEDULER;
+
+typedef void (*Feed_Jobs)(JOB* job_root);
+/**
+ * This part is common to all schedulers.
+ */
+typedef struct job_scheduler_comn
+{
+	int32_t time_slice_size;
+	int32_t policy;
+
+	JOB *job_in_service; /**< Only one job can be running at a time, in a single core single CPU system */
+	JOB pending_jobs_queue;
+
+	Feed_Jobs feeder;
+}JOB_SCHEDULER_COMN;
+
+typedef struct fcfs
+{
+	JOB_SCHEDULER_COMN comn;
+}FCFS_SCHED;
+
+typedef struct sjf_p
+{
+	JOB_SCHEDULER_COMN comn;
+}SJF_SCHED;
+
+typedef struct rr
+{
+	JOB_SCHEDULER_COMN comn;
+}RR_SCHED;
+
+typedef struct sjf_np
+{
+	JOB_SCHEDULER_COMN comn;
+}SJF_NP_SCHED;
+
+typedef struct prio
+{
+	JOB_SCHEDULER_COMN comn;
+}PRIO_SCHED;
+
+typedef struct multilevel
+{
+	JOB_SCHEDULER_COMN comn;
+}ML_SCHED;
+
+typedef struct multilevel_feedback
+{
+	JOB_SCHEDULER_COMN comn;
+}ML_FB_SCHED;
+
+typedef struct cfs
+{
+	JOB_SCHEDULER_COMN comn;
+}CFS_SCHED;
+
+typedef struct _job_scheduler
+{
+	uint32_t currently_selected_sched;
+
+	FCFS_SCHED fcfs;
+	SJF_SCHED sjf;
+	SJF_NP_SCHED sjp_np;
+	RR_SCHED rr;
+	PRIO_SCHED prio;
+	ML_SCHED ml;
+	ML_FB_SCHED ml_fb;
+	CFS_SCHED cfs;
+}JOB_SCHEDULER;
+
 #ifdef INCLUDE_GLOBALS
 struct textual_names 
 {
@@ -89,8 +174,15 @@ struct textual_names
 	{6, "Multi-Level Feedback Queues Scheduler"},
 	{7, "Completely Fair Scheduler"},
 };
+
+DISPATCH dispatcher;
+CLOCK_SCHEDULER clock_scheduler;
+JOB_SCHEDULER job_scheduler;
 #else
 extern struct textual_names menu[__MAX_SCHEDULER_COUNT__];
+extern DISPATCH dispatcher;
+extern CLOCK_SCHEDULER clock_scheduler;
+extern JOB_SCHEDULER job_scheduler;
 #endif
 
 

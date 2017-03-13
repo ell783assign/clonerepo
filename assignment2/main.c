@@ -80,11 +80,13 @@ int32_t init_dispatcher(const char *file_name)
 	char *job_line;
 
 	JOB *job = NULL;
-	JOB jobs_list_root;
+	
 
-	int32_t num_jobs, jobs_read=0;
+	int32_t jobs_read=0;
 
-	INIT_CLL_ROOT(job_list_root);
+	INIT_CLL_ROOT(dispatcher.job_list_root);
+	dispatcher.jobs_remaining = 0;
+	dispatcher.num_jobs = 0;
 
 	if(fp== NULL)
 	{
@@ -93,13 +95,13 @@ int32_t init_dispatcher(const char *file_name)
 	}
 
 	job_line = fgets(job_line_buffer, sizeof(job_line), fp);
-	if(sscanf(job_line, "%d", &num_jobs)<1)
+	if(sscanf(job_line, "%d", &dispatcher.num_jobs)<1)
 	{
 		ERROR("Malformed input file.\n");
 		ret_val = -1;
 		goto EXIT_LABEL;
 	}
-	TRACE("Number of jobs: %d\n", num_jobs);
+	TRACE("Number of jobs: %d\n", dispatcher.num_jobs);
 
 	job_line = fgets(job_line_buffer, sizeof(job_line), fp);
 	while(job_line!= NULL)
@@ -120,11 +122,15 @@ int32_t init_dispatcher(const char *file_name)
 			goto EXIT_LABEL;
 		}
 
+		dispatcher.num_jobs++;
+
+		dispatcher.jobs_remaining++;
+		
 		job->finish_time = -1;
 		job->ts_root.next = NULL;
 		job->ts_root.ts = -1;
 
-		INSERT_AFTER(job, &job_list_root);
+		INSERT_AFTER(job, &dispatcher.job_list_root);
 	}
 
 EXIT_LABEL:	
@@ -138,5 +144,34 @@ int32_t init_sink()
 
 int32_t init_scheduler()
 {
+	clock_scheduler.ticks = 0;
+
+	/* initialize each policy scheduler */
+	init_scheduler_comn(FCFS, 0, feed_fcfs, &scheduler.fcfs);
+
+	init_scheduler_comn(SJF_NP, 0, feed_sjf_np, &scheduler.sjf_np);
+
+	init_scheduler_comn(SJF_P, 0, feed_sjf, &scheduler.sjf);
+
+	init_scheduler_comn(RR, 10, feed_rr, &scheduler.rr);
+
+	init_scheduler_comn(PRIORITY, 0, feed_prio, &scheduler.prio);
+
+	init_scheduler_comn(MULTILEVEL_Q, 0, feed_ml, &scheduler.ml);
+
+	init_scheduler_comn(MF_Q, 0, feed_mfq, &scheduler.ml_fb);
+
+	init_scheduler_comn(CFS, 0, feed_cfs, &scheduler.cfs);
+		
 	return 0;
+}
+
+void init_scheduler_comn(uint32_t policy, uint32_t slice_size, Feed_Job method, JOB_SCHEDULER_COMN *sched)
+{
+	sched->feeder = method;
+	sched->time_slice = slice_size;
+	sched->policy = policy;
+
+	INIT_CLL_ROOT(sched->pending_jobs_queue);
+	sched->job_in_service = NULL;
 }
