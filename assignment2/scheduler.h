@@ -9,34 +9,34 @@ typedef struct circular_linked_list
 }CLL;
 
 #define INIT_CLL_ROOT(LIST)					\
-	LIST.self = NULL;						\
-	LIST.prev = NULL;						\
-	LIST.next = NULL;
+	(LIST).self = NULL;						\
+	(LIST).prev = &(LIST);						\
+	(LIST).next = &(LIST);
 
 #define INIT_CLL_NODE(NODE,SELF)			\
-	NODE->self = SELF;						\
-	NODE->next = NULL;						\
-	NODE->prev = NULL;		
+	(NODE).self = (SELF);					\
+	(NODE).next = NULL;					\
+	(NODE).prev = NULL;		
 
 //Read as Insert A after B
 #define INSERT_AFTER(A,B)					\
-	A->next = B->next;						\
-	A->next.prev = A;						\
-	B->next = A;							\
-	A->prev = B;	
+	(A).next = (B).next;						\
+	(A).next->prev = &(A);						\
+	(B).next = &(A);							\
+	(A).prev = &(B);	
 
 //Read as Insert A before B
 #define INSERT_BEFORE(A,B)					\
-	A->next = B;							\
-	B->prev.next = A;						\
-	A->prev = B->prev;						\
-	B->prev = A;
+	(A).next = &(B);							\
+	(B).prev->next = &(A);						\
+	(A).prev = (B).prev;						\
+	(B).prev = &(A);
 
 #define REMOVE_FROM_LIST(A)					\
-	A->next.prev = A->prev;					\
-	A->prev.next = A->next;					\
-	A->prev = NULL;							\
-	A->next = NULL;			
+	(A).next->prev = (A).prev;					\
+	(A).prev->next = (A).next;					\
+	(A).prev = NULL;							\
+	(A).next = NULL;			
 
 
 typedef struct reschedule_timing
@@ -71,13 +71,13 @@ typedef enum
 	CFS,
 
 	__MAX_SCHEDULER_COUNT__
-}JOB_SCHEDULER;
+}JOB_SCHEDULER_TYPES;
 
 typedef struct _dispatch
 {
 	int32_t num_jobs;
 
-	JOB jobs_list_root;
+	CLL job_list_root;
 
 	int32_t num_jobs_remaining;
 
@@ -89,19 +89,19 @@ typedef struct _clock_scheduler
 
 }CLOCK_SCHEDULER;
 
-typedef void (*Feed_Jobs)(JOB* job_root);
+typedef void (Feed_Jobs)(JOB* job_root);
 /**
  * This part is common to all schedulers.
  */
 typedef struct job_scheduler_comn
 {
-	int32_t time_slice_size;
+	int32_t time_slice;
 	int32_t policy;
 
 	JOB *job_in_service; /**< Only one job can be running at a time, in a single core single CPU system */
-	JOB pending_jobs_queue;
+	CLL pending_jobs_queue;
 
-	Feed_Jobs feeder;
+	Feed_Jobs *feeder;
 }JOB_SCHEDULER_COMN;
 
 typedef struct fcfs
@@ -150,13 +150,20 @@ typedef struct _job_scheduler
 
 	FCFS_SCHED fcfs;
 	SJF_SCHED sjf;
-	SJF_NP_SCHED sjp_np;
+	SJF_NP_SCHED sjf_np;
 	RR_SCHED rr;
 	PRIO_SCHED prio;
 	ML_SCHED ml;
 	ML_FB_SCHED ml_fb;
 	CFS_SCHED cfs;
 }JOB_SCHEDULER;
+
+typedef struct _scheduler
+{
+	CLOCK_SCHEDULER clock_scheduler;
+	JOB_SCHEDULER job_scheduler;
+}SCHEDULER;
+
 
 #ifdef INCLUDE_GLOBALS
 struct textual_names 
@@ -176,15 +183,20 @@ struct textual_names
 };
 
 DISPATCH dispatcher;
-CLOCK_SCHEDULER clock_scheduler;
-JOB_SCHEDULER job_scheduler;
+SCHEDULER scheduler;
 #else
 extern struct textual_names menu[__MAX_SCHEDULER_COUNT__];
 extern DISPATCH dispatcher;
-extern CLOCK_SCHEDULER clock_scheduler;
-extern JOB_SCHEDULER job_scheduler;
+extern SCHEDULER scheduler;;
 #endif
 
-
+void feed_fcfs(JOB *);
+void feed_sjf_np(JOB *);
+void feed_sjf(JOB *);
+void feed_rr(JOB *);
+void feed_prio(JOB *);
+void feed_ml(JOB *);
+void feed_mfq(JOB *);
+void feed_cfs(JOB *);
 
 #endif
