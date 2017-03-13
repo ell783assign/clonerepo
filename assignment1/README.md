@@ -72,6 +72,41 @@ The assignment consists of two main parts: An FTP **Server** and an FTP **Client
 * Saving received data into a local resource.
 * `cd`, `chmod` and `ls` are symmetrical.
 
+### Directory structure
+```
+├── client_files
+│   ├── cli.c
+│   └── client.c
+├── logs
+│   └── README.md
+├── Makefile
+├── README.md
+├── server_files
+│   └── server.c
+└── utils
+    ├── cli_interface.h
+    ├── ftp_interface.h
+    ├── transport_interface.h
+    ├── utils.c
+    └── utils.h
+```
+
+`client_files` contains two files `cli.c` and `client.c`. `cli.c` Contains routines for CLI on the client. (Sumeet Sir's code should go here mainly).
+`client.c` implements the client side's main routines.
+
+`server_files` contains server related entry point files.
+
+`utils` contains the code that may be common to both client and server codes. Importantly, `cli_interface.h` is mostly specific to client side's CLI implementation. `ftp_interface.h` defines the structures that are passed on the transport layer. Note that this scheme assumes that both sides (client and servers) are both either little-endian or both big-endian. If a perfectly agnostic scheme is to be used, convert each member to a byte array and ensure that whatever is written to the network is in big-endian scheme. `transport_interface.h` is the specification used by higher layers to send or receive messages on sockets. `utils.h` contains logging macros and utilities along with some useful/customizable macros. It also contains all relevant header files. `utils.c` implements the methods specified in `utils.h` and `transport_interface.h`.
+
+### How to compile and execute.
+
+Running `make all` from the parent folder (`assignment1`) should compile all the files. The artifacts generated will be a shared library `utils.a` in `utils` folder, and `server` and `client` binaries. 
+
+After that, server can be started directly as `./server` and client as `./client` from different terminals.
+
+> By default, debug tracing is enabled (and must be disabled while demo). This is for debugging while development, it can be disabled by setting `BUILD_TRACE` to 0 in `Makefile`.
+
+
 ### Comments:
 
 - For starters, we can skip the beautification features like showing the progress of upload/download.

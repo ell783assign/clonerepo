@@ -20,11 +20,19 @@
 
 #include <sys/wait.h> 
 
+#include <ftp_interface.h>
+
 int32_t alt_gets(char *);
 
+#ifdef BUILD_DEBUG
 #define TRACE(...) 	fprintf(stderr, "TRACE  \t" __VA_ARGS__)
 #define WARN(...) 	fprintf(stderr, "WARNING\t"__VA_ARGS__)
 #define ERROR(...)  fprintf(stderr, "ERROR  \t"__VA_ARGS__)
+#else
+#define TRACE(...) 	
+#define WARN(...) 	
+#define ERROR(...) 
+#endif
 
 #define TRUE  		(uint32_t)1
 #define FALSE 		(uint32_t)0
@@ -133,73 +141,7 @@ EXIT_LABEL:
 
 #define MAX_DIR_BUF_LEN				1024
 
-typedef enum ftp_cmds 
-{  
-	LS=0,
-	CD,
-	CHMOD,
-	GET,
-	PUT,
 
-	__MAX_CMD_MEMBER__
-}FTP_CMD;
-
-typedef struct msg_hdr
-{
-	uint32_t cmd;
-	uint32_t is_request;
-	uint32_t response;
-	uint32_t length;
-}MSG_HDR;
-
-typedef struct msg_comn
-{
-	char data[1];
-}MSG_COMN;
-
-typedef struct msg_cd
-{
-	MSG_HDR hdr;
-	MSG_COMN comn;
-}MSG_CD;
-
-typedef struct msg_ls
-{
-	MSG_HDR hdr;
-	MSG_COMN comn;
-}MSG_LS;
-
-typedef struct msg_chmod
-{
-	MSG_HDR hdr;
-	uint8_t perms[3];
-	MSG_COMN comn;
-}MSG_CHMOD;
-
-typedef struct msg_get
-{
-	MSG_HDR hdr;
-	MSG_COMN comn;
-}MSG_GET;
-
-
-typedef struct msg_put
-{
-	MSG_HDR hdr;
-	uint32_t file_name_len;
-	MSG_COMN comn;
-}MSG_PUT;
-
-
-typedef union msg_gen
-{
-	MSG_HDR hdr;
-	MSG_CD cd;
-	MSG_LS ls;
-	MSG_GET get;
-	MSG_PUT put;
-	MSG_CHMOD chmod;
-}MSG_GEN;
 
 int32_t read_file_to_buffer(char *name, char **msg_buf, int32_t *length);
 int32_t write_file_to_disk(char *name, char *msg_buf, int32_t length);
