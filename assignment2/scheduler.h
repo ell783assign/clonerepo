@@ -96,7 +96,7 @@ typedef struct _clock_scheduler
 
 }CLOCK_SCHEDULER;
 
-typedef void (Feed_Jobs)(JOB* job_root);
+typedef void (Feed_Jobs)(CLL job_root);
 /**
  * This part is common to all schedulers.
  */
@@ -197,13 +197,13 @@ extern DISPATCH dispatcher;
 extern SCHEDULER scheduler;;
 #endif
 
-void feed_fcfs(JOB *);
-void feed_sjf_np(JOB *);
-void feed_sjf(JOB *);
-void feed_rr(JOB *);
-void feed_prio(JOB *);
-void feed_ml(JOB *);
-void feed_mfq(JOB *);
-void feed_cfs(JOB *);
+void feed_fcfs(CLL);
+void feed_sjf_np(CLL);
+void feed_sjf(CLL);
+void feed_rr(CLL);
+void feed_prio(CLL);
+void feed_ml(CLL);
+void feed_mfq(CLL);
+void feed_cfs(CLL);
 
 #endif

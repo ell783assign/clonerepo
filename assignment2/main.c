@@ -284,35 +284,44 @@ void init_scheduler_comn(uint32_t policy, uint32_t slice_size, Feed_Jobs method,
 }
 
 
-void feed_fcfs(JOB *job)
+void feed_fcfs(CLL root)
+{
+	JOB *job=NULL;
+
+	for(job = (JOB *)NEXT_IN_LIST(root);
+		job != NULL;
+		job = (JOB *)NEXT_IN_LIST(job->node))
+	{
+		TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
+					job->burst_time, job->priority, job->is_background);
+	}
+	return;
+}
+void feed_sjf_np(CLL incoming_job_queue)
 {
 
 }
-void feed_sjf_np(JOB *job)
+void feed_sjf(CLL incoming_job_queue)
 {
 
 }
-void feed_sjf(JOB *job)
+void feed_rr(CLL incoming_job_queue)
 {
 
 }
-void feed_rr(JOB *job)
+void feed_prio(CLL incoming_job_queue)
 {
 
 }
-void feed_prio(JOB *job)
+void feed_ml(CLL incoming_job_queue)
 {
 
 }
-void feed_ml(JOB *job)
+void feed_mfq(CLL incoming_job_queue)
 {
 
 }
-void feed_mfq(JOB *job)
-{
-
-}
-void feed_cfs(JOB *job)
+void feed_cfs(CLL incoming_job_queue)
 {
 
 }
@@ -406,16 +415,8 @@ void spin_scheduler()
 		num_jobs_added = get_jobs_at_instant(scheduler.clock_scheduler.ticks, &root);
 
 		TRACE("Number of jobs arriving at %d: %d\n", scheduler.clock_scheduler.ticks, num_jobs_added);
-
-		JOB *job=NULL;
-
-		for(job = (JOB *)NEXT_IN_LIST(root);
-			job != NULL;
-			job = (JOB *)NEXT_IN_LIST(job->node))
-		{
-			TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
-						job->burst_time, job->priority, job->is_background);
-		}
+		policy->feeder(root);
+		
 		if(num_jobs_added == -1)
 		{
 			TRACE("No more jobs in input queue.\n");
