@@ -220,8 +220,9 @@ void reset_dispatcher()
 		dispatcher.num_jobs_remaining++;
 		
 		job->finish_time = -1;
-		job->ts_root.next = NULL;
-		job->ts_root.ts = -1;
+		job->start_time = -1;
+		job->run_time = 0;
+		INIT_CLL_ROOT(job->ts_root);
 
 		INSERT_BEFORE(job->node, dispatcher.job_list_root);
 	}
@@ -260,7 +261,7 @@ int32_t init_scheduler()
 
 	init_scheduler_comn(SJF_P, 0, feed_sjf, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.sjf);
 
-	init_scheduler_comn(RR, 10, feed_rr, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.rr);
+	init_scheduler_comn(RR, 100, feed_rr, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.rr);
 
 	init_scheduler_comn(PRIORITY, 0, feed_prio, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.prio);
 
@@ -278,17 +279,18 @@ void init_scheduler_comn(uint32_t policy, uint32_t slice_size, Feed_Jobs method,
 	sched->feeder = method;
 	sched->time_slice = slice_size;
 	sched->policy = policy;
+	sched->next_switch = slice_size; /* Next context switch occurs at time slice period, if applicable*/
 
 	INIT_CLL_ROOT(sched->pending_jobs_queue);
 	sched->job_in_service = NULL;
 }
 
 
-void feed_fcfs(CLL root)
+void feed_fcfs(CLL * root)
 {
 	JOB *job=NULL;
 
-	for(job = (JOB *)NEXT_IN_LIST(root);
+	for(job = (JOB *)NEXT_IN_LIST(*root);
 		job != NULL;
 		job = (JOB *)NEXT_IN_LIST(job->node))
 	{
@@ -297,31 +299,187 @@ void feed_fcfs(CLL root)
 	}
 	return;
 }
-void feed_sjf_np(CLL incoming_job_queue)
+void feed_sjf_np(CLL *incoming_job_queue)
 {
 
 }
-void feed_sjf(CLL incoming_job_queue)
+void feed_sjf(CLL *incoming_job_queue)
 {
 
 }
-void feed_rr(CLL incoming_job_queue)
+void feed_rr(CLL *incoming_job_queue)
+{
+	JOB *job=NULL;
+	JOB *current_job = NULL;
+
+	TIMESTAMP *ts = NULL;
+
+	/* Put incoming jobs at the end of queue */
+	/**
+	 * This assumes that all jobs have arrived while the current job was 
+	 * executing.
+	 * This means that while we are checking if the current job has finished
+	 * its quota, no new jobs may be added to the queue.
+	 */
+	if((*incoming_job_queue).next != (*incoming_job_queue).self)
+	{
+		for(job = (JOB *)NEXT_IN_LIST(*incoming_job_queue);
+			job != NULL;
+			job = (JOB *)NEXT_IN_LIST(*incoming_job_queue))
+		{
+			REMOVE_FROM_LIST(job->node);
+			INSERT_BEFORE(job->node, scheduler.job_scheduler.rr.comn.pending_jobs_queue);
+			TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
+						job->burst_time, job->priority, job->is_background);
+		}
+	}
+	/* Is there a job finishing in this time instant? */
+	current_job = scheduler.job_scheduler.rr.comn.job_in_service;
+	if(current_job != NULL)
+	{
+		current_job->run_time++;
+		if(current_job->run_time < current_job->burst_time)
+		{
+			/* Nope, there is still time for it to finish. */
+			/* Has it exhausted the time quanta? */
+			if(scheduler.job_scheduler.rr.comn.next_switch 
+										== scheduler.clock_scheduler.ticks)
+			{
+				/* Swap it out. Move it to the end of pending queue. */
+				INSERT_BEFORE(current_job->node, 
+							scheduler.job_scheduler.rr.comn.pending_jobs_queue);
+
+				TRACE("Swap %d out at %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+
+				/* Pop next job from queue and update its service in time. */
+				current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.rr.comn.pending_jobs_queue);
+				if(current_job!=NULL)
+				{
+					REMOVE_FROM_LIST(current_job->node);
+					ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+					if(ts==NULL)
+					{
+						ERROR("Error allocating memory for preserving state of job.\n");
+						exit(0);
+					}
+					ts->ts = scheduler.clock_scheduler.ticks;
+					INIT_CLL_NODE(ts->node, ts);
+					INSERT_BEFORE(ts->node, current_job->ts_root);
+					if(current_job->start_time==-1)
+					{
+						/* Scheduled for the first time */
+						current_job->start_time = scheduler.clock_scheduler.ticks;
+						current_job->run_time = 0;
+					}
+					TRACE("Swap %d in\n", current_job->pid);
+					/* Update next switch time to either current_time+slice*/
+					scheduler.job_scheduler.rr.comn.next_switch = 
+										scheduler.clock_scheduler.ticks + 
+										scheduler.job_scheduler.rr.comn.time_slice;
+				}
+			}
+		}
+		else if(current_job->run_time==current_job->burst_time)
+		{
+			/* Pass it to sink module */
+			//TODO
+			current_job->finish_time = scheduler.clock_scheduler.ticks;
+			TRACE("Job %d finished at %d\n", current_job->pid, current_job->finish_time);
+			/* Remove its time stamps */
+			ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+			while(ts != NULL)
+			{
+				//TRACE("Scheduled at %d\n", ts->ts);
+				REMOVE_FROM_LIST(ts->node);
+				free(ts);
+				ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+			}			
+			free(current_job);
+
+			/* Schedule next job.*/
+			/* Pop next job from queue and update its service in time. */
+			current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.rr.comn.pending_jobs_queue);
+			if(current_job!=NULL)
+			{
+				REMOVE_FROM_LIST(current_job->node);
+				ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+				if(ts==NULL)
+				{
+					ERROR("Error allocating memory for preserving state of job.\n");
+					exit(0);
+				}
+				ts->ts = scheduler.clock_scheduler.ticks;
+				INIT_CLL_NODE(ts->node, ts);
+				INSERT_BEFORE(ts->node, current_job->ts_root);
+				if(current_job->start_time==-1)
+				{
+					/* Scheduled for the first time */
+					current_job->start_time = scheduler.clock_scheduler.ticks;
+					current_job->run_time = 0;
+				}
+				TRACE("Schedule %d \n", current_job->pid);
+				/* Update next switch time to either current_time+slice*/
+				scheduler.job_scheduler.rr.comn.next_switch = 
+										scheduler.clock_scheduler.ticks + 
+										scheduler.job_scheduler.rr.comn.time_slice;
+			}
+			/* Else we have nothing to do for now. */
+		}
+		else
+		{
+			ERROR("Job in scheduler past its execution time!\n");
+			exit(0);
+		}
+	}
+	else
+	{
+		/* There were no jobs. Schedule the head of queue*/
+		/* Pop next job from queue and update its service in time. */
+		current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.rr.comn.pending_jobs_queue);
+		if(current_job!=NULL)
+		{
+			REMOVE_FROM_LIST(current_job->node);
+			ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+			if(ts==NULL)
+			{
+				ERROR("Error allocating memory for preserving state of job.\n");
+				exit(0);
+			}
+			ts->ts = scheduler.clock_scheduler.ticks;
+			INIT_CLL_NODE(ts->node, ts);
+			INSERT_BEFORE(ts->node, current_job->ts_root);
+			current_job->start_time = scheduler.clock_scheduler.ticks;
+			current_job->run_time = 0;
+
+			TRACE("Sschedule %d at %d\n", current_job->pid,  scheduler.clock_scheduler.ticks);
+			/* Update next switch time to either current_time+slice*/
+			scheduler.job_scheduler.rr.comn.next_switch = 
+									scheduler.clock_scheduler.ticks + 
+									scheduler.job_scheduler.rr.comn.time_slice;
+		}
+	}
+	/* By now, either current job is still executing, or has been swapped out or has finished executing */
+	scheduler.job_scheduler.rr.comn.job_in_service = current_job;
+	if(scheduler.job_scheduler.rr.comn.job_in_service != NULL)
+	{
+		//TRACE("Process %d running at instant %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+	}
+
+	return;
+}
+void feed_prio(CLL *incoming_job_queue)
 {
 
 }
-void feed_prio(CLL incoming_job_queue)
+void feed_ml(CLL *incoming_job_queue)
 {
 
 }
-void feed_ml(CLL incoming_job_queue)
+void feed_mfq(CLL *incoming_job_queue)
 {
 
 }
-void feed_mfq(CLL incoming_job_queue)
-{
-
-}
-void feed_cfs(CLL incoming_job_queue)
+void feed_cfs(CLL *incoming_job_queue)
 {
 
 }
@@ -346,7 +504,7 @@ int32_t get_jobs_at_instant(uint32_t instant, CLL *root)
 	else
 	{
 		/* Signal we are finished. */
-		TRACE("No more jobs.\n");
+		//TRACE("No more jobs.\n");
 		num_jobs = -1;
 	}
 
@@ -414,14 +572,16 @@ void spin_scheduler()
 		INIT_CLL_ROOT(root);
 		num_jobs_added = get_jobs_at_instant(scheduler.clock_scheduler.ticks, &root);
 
-		TRACE("Number of jobs arriving at %d: %d\n", scheduler.clock_scheduler.ticks, num_jobs_added);
-		policy->feeder(root);
-		
+		//TRACE("Number of jobs arriving at %d: %d\n", scheduler.clock_scheduler.ticks, num_jobs_added);
+		policy->feeder(&root);
+
 		if(num_jobs_added == -1)
 		{
-			TRACE("No more jobs in input queue.\n");
-			/* This is temporary */
-			scheduler.clock_scheduler.signal_stop = TRUE;
+			//TRACE("No more jobs in input queue.\n");
+			if(policy->job_in_service == NULL)
+			{
+				scheduler.clock_scheduler.signal_stop = TRUE;
+			}
 		}
 		scheduler.clock_scheduler.ticks++;
 	}

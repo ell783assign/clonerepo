@@ -39,11 +39,11 @@ typedef struct circular_linked_list
 	(A).next = NULL;			
 
 #define NEXT_IN_LIST(NODE)						\
-	(NODE.next->self)
+	(NODE).next->self
 
 typedef struct reschedule_timing
 {
-	struct reschedule_timing *next;
+	CLL node;
 	int32_t ts;
 }TIMESTAMP;
 
@@ -57,8 +57,10 @@ typedef struct job
 	uint32_t priority;
 	uint32_t is_background;
 
+	int32_t start_time;
+	int32_t run_time;
 	int32_t finish_time;
-	TIMESTAMP ts_root;
+	CLL ts_root;
 }JOB;
 
 typedef enum 
@@ -96,13 +98,14 @@ typedef struct _clock_scheduler
 
 }CLOCK_SCHEDULER;
 
-typedef void (Feed_Jobs)(CLL job_root);
+typedef void (Feed_Jobs)(CLL *job_root);
 /**
  * This part is common to all schedulers.
  */
 typedef struct job_scheduler_comn
 {
 	int32_t time_slice;
+	int32_t next_switch;
 	int32_t policy;
 
 	JOB *job_in_service; /**< Only one job can be running at a time, in a single core single CPU system */
@@ -197,13 +200,13 @@ extern DISPATCH dispatcher;
 extern SCHEDULER scheduler;;
 #endif
 
-void feed_fcfs(CLL);
-void feed_sjf_np(CLL);
-void feed_sjf(CLL);
-void feed_rr(CLL);
-void feed_prio(CLL);
-void feed_ml(CLL);
-void feed_mfq(CLL);
-void feed_cfs(CLL);
+void feed_fcfs(CLL *);
+void feed_sjf_np(CLL *);
+void feed_sjf(CLL *);
+void feed_rr(CLL *);
+void feed_prio(CLL *);
+void feed_ml(CLL *);
+void feed_mfq(CLL *);
+void feed_cfs(CLL *);
 
 #endif
