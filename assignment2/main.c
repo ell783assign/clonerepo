@@ -322,14 +322,23 @@ int32_t get_jobs_at_instant(uint32_t instant, CLL *root)
 	int32_t num_jobs = 0;
 	JOB *next_job = NEXT_IN_LIST(dispatcher.job_list_root);
 
-	while(next_job->arrival_time==instant)
+	if(next_job != NULL)
 	{
-		/* Remove it from input jobs queue and add it to the list passed. */
-		REMOVE_FROM_LIST(next_job->node);
-		INSERT_BEFORE(next_job->node, *root);
-		next_job = NEXT_IN_LIST(dispatcher.job_list_root);		
-		dispatcher.num_jobs_remaining--;
-		num_jobs++;
+		while(next_job != NULL && next_job->arrival_time==instant)
+		{
+			/* Remove it from input jobs queue and add it to the list passed. */
+			REMOVE_FROM_LIST(next_job->node);
+			INSERT_BEFORE(next_job->node, *root);
+			next_job = NEXT_IN_LIST(dispatcher.job_list_root);		
+			dispatcher.num_jobs_remaining--;
+			num_jobs++;
+		}
+	}
+	else
+	{
+		/* Signal we are finished. */
+		TRACE("No more jobs.\n");
+		num_jobs = -1;
 	}
 
 	return(num_jobs);
@@ -407,7 +416,12 @@ void spin_scheduler()
 			TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
 						job->burst_time, job->priority, job->is_background);
 		}
-		break;
+		if(num_jobs_added == -1)
+		{
+			TRACE("No more jobs in input queue.\n");
+			/* This is temporary */
+			scheduler.clock_scheduler.signal_stop = TRUE;
+		}
 		scheduler.clock_scheduler.ticks++;
 	}
 	return;
