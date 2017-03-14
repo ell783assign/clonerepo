@@ -12,6 +12,7 @@ int32_t get_jobs_at_instant(uint32_t , CLL *);
 
 void spin_scheduler();
 
+void insertion_sort_insert(JOB *, CLL *);
 
 static inline void show_menu()
 {
@@ -451,7 +452,7 @@ void feed_rr(CLL *incoming_job_queue)
 			current_job->start_time = scheduler.clock_scheduler.ticks;
 			current_job->run_time = 0;
 
-			TRACE("Sschedule %d at %d\n", current_job->pid,  scheduler.clock_scheduler.ticks);
+			TRACE("Schedule %d at %d\n", current_job->pid,  scheduler.clock_scheduler.ticks);
 			/* Update next switch time to either current_time+slice*/
 			scheduler.job_scheduler.rr.comn.next_switch = 
 									scheduler.clock_scheduler.ticks + 
@@ -467,10 +468,171 @@ void feed_rr(CLL *incoming_job_queue)
 
 	return;
 }
+
+void insertion_sort_insert(JOB *job, CLL *queue)
+{
+	JOB *node = (JOB *)NEXT_IN_LIST(*queue);
+	int32_t inserted = FALSE;
+	while(node != NULL)
+	{
+		if(job->priority > node->priority)
+		{
+			TRACE("Insert before job %d\n", node->pid);
+			INSERT_BEFORE(job->node, node->node);
+			inserted = TRUE;
+			break;
+		}
+		node = (JOB *)NEXT_IN_LIST(node->node);
+	}
+	if(!inserted)
+	{
+		TRACE("Insert at end of queue\n");
+		INSERT_BEFORE(job->node, *queue);
+	}
+	return;
+}
+
 void feed_prio(CLL *incoming_job_queue)
 {
+	JOB *job = NULL;
+	JOB *current_job = NULL;
+	TIMESTAMP *ts = NULL;
+	/* 
+	 * The already present pending queue is already sorted by priority.
+	 * So, we simply use insertion sort to place each job from the incoming
+	 * queue in its right place.
+	 * 
+	 * Finally, if the currently running job has priority less than the job at 
+	 * the head of pending queue, pre-empt it and add it to the queue after
+	 * appropriately updating its runtime.
+	 */
 
+	if((*incoming_job_queue).next != (*incoming_job_queue).self)
+	{
+		for(job = (JOB *)NEXT_IN_LIST(*incoming_job_queue);
+			job != NULL;
+			job = (JOB *)NEXT_IN_LIST(*incoming_job_queue))
+		{
+			REMOVE_FROM_LIST(job->node);
+			TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
+			job->burst_time, job->priority, job->is_background);
+			insertion_sort_insert(job, &scheduler.job_scheduler.prio.comn.pending_jobs_queue);
+		}
+	}
+	if(scheduler.job_scheduler.prio.comn.time_slice==0)
+	{
+		current_job = scheduler.job_scheduler.prio.comn.job_in_service;
+		/* There is no time-slicing */
+		if(current_job==NULL)
+		{
+			/* No job in CPU. Pluck one from queue */
+			current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.prio.comn.pending_jobs_queue);
+			if(current_job!=NULL)
+			{
+				REMOVE_FROM_LIST(current_job->node);
+				ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+				if(ts==NULL)
+				{
+					ERROR("Error allocating memory for preserving state of job.\n");
+					exit(0);
+				}
+				ts->ts = scheduler.clock_scheduler.ticks;
+				INIT_CLL_NODE(ts->node, ts);
+				INSERT_BEFORE(ts->node, current_job->ts_root);
+				current_job->start_time = scheduler.clock_scheduler.ticks;
+				current_job->run_time = 0;
+
+				TRACE("Schedule %d at %d\n", current_job->pid,  scheduler.clock_scheduler.ticks);
+			}
+		}
+		else
+		{
+			/* There is a job executing. Has it completed execution? */
+			current_job->run_time++;
+			if(current_job->run_time==current_job->burst_time)
+			{
+				/* Pass it to sink module */
+				//TODO
+				current_job->finish_time = scheduler.clock_scheduler.ticks;
+				TRACE("Job %d finished at %d\n", current_job->pid, current_job->finish_time);
+				/* Remove its time stamps */
+				ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+				while(ts != NULL)
+				{
+					//TRACE("Scheduled at %d\n", ts->ts);
+					REMOVE_FROM_LIST(ts->node);
+					free(ts);
+					ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+				}			
+				free(current_job);
+
+				/* Schedule next job.*/
+				/* Pop next job from queue and update its service in time. */
+				current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.prio.comn.pending_jobs_queue);
+				if(current_job!=NULL)
+				{
+					REMOVE_FROM_LIST(current_job->node);
+					ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+					if(ts==NULL)
+					{
+						ERROR("Error allocating memory for preserving state of job.\n");
+						exit(0);
+					}
+					ts->ts = scheduler.clock_scheduler.ticks;
+					INIT_CLL_NODE(ts->node, ts);
+					INSERT_BEFORE(ts->node, current_job->ts_root);
+					if(current_job->start_time==-1)
+					{
+						/* Scheduled for the first time */
+						current_job->start_time = scheduler.clock_scheduler.ticks;
+						current_job->run_time = 0;
+					}
+					TRACE("Schedule %d \n", current_job->pid);
+				}
+				/* Else we have nothing to do for now. */
+			}
+			else
+			{
+				job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.prio.comn.pending_jobs_queue);
+				if( job!=NULL && current_job->priority < job->priority)
+				{
+					/* Swap out currently executing job for a higher priority job (saved in current_job)*/
+					insertion_sort_insert(current_job, 
+											&scheduler.job_scheduler.prio.comn.pending_jobs_queue);
+					TRACE("Swap %d out at %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+
+					current_job = job;
+
+					REMOVE_FROM_LIST(current_job->node);
+					ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+					if(ts==NULL)
+					{
+						ERROR("Error allocating memory for preserving state of job.\n");
+						exit(0);
+					}
+					ts->ts = scheduler.clock_scheduler.ticks;
+					INIT_CLL_NODE(ts->node, ts);
+					INSERT_BEFORE(ts->node, current_job->ts_root);
+					if(current_job->start_time==-1)
+					{
+						/* Scheduled for the first time */
+						current_job->start_time = scheduler.clock_scheduler.ticks;
+						current_job->run_time = 0;
+					}
+					TRACE("Swap %d in\n", current_job->pid);
+				}
+			}
+		}
+		/* By now, either current job is still executing, or has been swapped out or has finished executing */
+		scheduler.job_scheduler.prio.comn.job_in_service = current_job;
+		if(scheduler.job_scheduler.prio.comn.job_in_service != NULL)
+		{
+			//TRACE("Process %d running at instant %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+		}
+	}
+	return;
 }
+
 void feed_ml(CLL *incoming_job_queue)
 {
 
