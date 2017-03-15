@@ -1,7 +1,7 @@
 #include <utils.h>
 #define MAXCMDLENGTH 512
 char cmdargs[3][MAXCMDLENGTH];
-#include <cli_interface.h>
+#include <sum_cli_interface.h>
 
 int32_t connect_to_server(uint32_t, char *);
 
