@@ -18,6 +18,8 @@ typedef struct bst_node
 	struct bst_node *right;
 
 	void *content;
+	/* for red-black tree, we add color */
+	enum coloring {RED, BLACK} color;
 }BST_NODE;
 
 #define BST_TREE_INIT(TREE, FUNC, OFFSET)		\
@@ -36,6 +38,10 @@ void * bst_find(void *, BST *);
 void * bst_next(BST_NODE *, BST *);
 void * bst_first(BST);
 void bst_delete(BST_NODE *, BST *);
+void bst_rotate_left(BST_NODE *, BST *);
+void bst_rotate_right(BST_NODE *, BST *);
+void *red_black_insert(BST_NODE *, BST *);
+
 
 void * bst_insert(BST_NODE *node, BST *tree)
 {
@@ -158,7 +164,12 @@ void bst_delete(BST_NODE *node, BST *tree)
 		/* Just make its left child its replacement */
 		if(node->left!=NULL)
 		{
-			if(node == node->parent->left)
+			/* Check if node deleted is root */
+			if(node == tree->root)
+			{
+				tree->root = node->left;
+			}
+			else if(node == node->parent->left)
 			{
 				node->parent->left = node->left;
 			}
@@ -173,7 +184,11 @@ void bst_delete(BST_NODE *node, BST *tree)
 		/* Just make its right child its replacement */
 		if(node->right!=NULL)
 		{
-			if(node == node->parent->left)
+			if(node == tree->root)
+			{
+				tree->root = node->right;
+			}
+			else if(node == node->parent->left)
 			{
 				node->parent->left = node->right;
 			}
@@ -187,7 +202,11 @@ void bst_delete(BST_NODE *node, BST *tree)
 	{
 		right_child = node->right;
 		/* Replace node by its left child */
-		if(node == node->parent->left)
+		if(node == tree->root)
+		{
+			tree->root = node->left;
+		}
+		else if(node == node->parent->left)
 		{
 			node->parent->left = node->left;
 		}
@@ -213,4 +232,143 @@ void bst_delete(BST_NODE *node, BST *tree)
 void *bst_first(BST tree)
 {
 	return (tree.first);
+}
+
+void bst_rotate_left(BST_NODE *node, BST *tree)
+{
+	/* This code ignores the possibility that someone will try to rotate left around a node that is rightmost */
+	BST_NODE *right_child=NULL;
+
+	right_child = node->right;
+	if(right_child->left != NULL)
+	{
+		right_child->left->parent = node;	
+	}
+	right_child->parent = node->parent; /* Could be root too */
+	if(right_child->parent == NULL)
+	{
+		tree->root = right_child;
+	}
+	else /* Not root */
+	{
+		if(node == node->parent->left)
+		{
+			/* Non-root and left child of parent */
+			node->parent->left = right_child;
+		}
+		else
+		{	
+			/* Non-root and right child of parent */
+			node->parent->right = right_child;
+		}
+	}
+	right_child->left = node;
+	node->parent = right_child;
+}
+
+void bst_rotate_right(BST_NODE *node, BST *tree)
+{
+	/* Rotate right about node */
+	BST_NODE *left_child = NULL;
+
+	left_child = node->left; /* Replaces node in tree */
+	if(left_child->right!=NULL)
+	{
+		node->left = left_child->right;
+	}
+	left_child->parent = node->parent;
+	if(left_child->parent == NULL)
+	{
+		tree->root = left_child;
+	}
+	else
+	{
+		if(node == node->parent->left)
+		{
+			node->parent->left = left_child;	
+		}
+		else
+		{
+			node->parent->right = left_child;		
+		}
+	}
+	left_child->right = node;
+	node->parent = left_child;
+
+	return;
+}
+
+void *red_black_insert(BST_NODE *node, BST *tree)
+{
+	/* First insert the node in tree as usual. Then restore red-black property */
+	BST_NODE *inserted = NULL;
+	BST_NODE *uncle = NULL;
+	inserted = bst_insert(node, tree);
+	if(inserted==NULL)
+	{
+		fprintf(stderr, "Error inserting into tree.\n");
+		exit(0);
+	}
+	/* Always give node red color */
+	node->color = RED;
+
+	/* If red-black properties are destroyed, restore them */
+	while((node != tree->root) && (node->parent->color == RED))
+	{
+		/* Node and its parent can't be of color RED */
+		if((node->parent->parent!= NULL) && (node->parent == node->parent->parent->left))
+		{
+			uncle = node->parent->parent->right;
+			/* Uncle is on the right */
+			if(uncle->color == RED)
+			{
+				/* Change colors of parent, uncle to black and grandparent to red*/
+				node->parent->color = BLACK;
+				uncle->colour = BLACK;
+				node->parent->parent->color = RED;
+			}
+			else
+			{
+				/* Uncle is black, but parent is RED */
+				if(node == node->parent->right)
+				{
+					/* Node on parent's right */
+					node = node->parent;
+					bst_rotate_left(node, tree);
+				}
+				/* Node is red */
+				node->parent->color = BLACK;
+				node->parent->parent->color = RED;
+				bst_rotate_right(node->parent->parent, tree);
+			}
+		}
+		else if(node->parent->parent!= NULL)
+		{
+			/* node's parent on right of parent's parent*/
+			uncle = node->parent->parent->left;	
+			if(uncle->color == RED)
+			{
+				/* Change colors of parent, uncle to black and grandparent to red*/
+				node->parent->color = BLACK;
+				uncle->colour = BLACK;
+				node->parent->parent->color = RED;
+			}
+			else
+			{
+				/* Uncle is black, but parent is RED */
+				if(node == node->parent->left)
+				{
+					/* Node on parent's right */
+					node = node->parent;
+					bst_rotate_left(node, tree);
+				}
+				/* Node is red */
+				node->parent->color = BLACK;
+				node->parent->parent->color = RED;
+				bst_rotate_right(node->parent->parent, tree);
+			}
+		}
+	}
+	/* Color the root black */
+	tree->root->color = BLACK;
 }
