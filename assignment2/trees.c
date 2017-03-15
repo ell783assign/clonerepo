@@ -326,6 +326,7 @@ void *red_black_insert(BST_NODE *node, BST *tree)
 				node->parent->color = BLACK;
 				uncle->colour = BLACK;
 				node->parent->parent->color = RED;
+				node = node->parent->parent;
 			}
 			else
 			{
@@ -336,10 +337,13 @@ void *red_black_insert(BST_NODE *node, BST *tree)
 					node = node->parent;
 					bst_rotate_left(node, tree);
 				}
+
+				/* Left left case */
 				/* Node is red */
 				node->parent->color = BLACK;
 				node->parent->parent->color = RED;
-				bst_rotate_right(node->parent->parent, tree);
+				bst_rotate_right(node->parent->parent, tree);				
+				
 			}
 		}
 		else if(node->parent->parent!= NULL)
@@ -356,19 +360,21 @@ void *red_black_insert(BST_NODE *node, BST *tree)
 			else
 			{
 				/* Uncle is black, but parent is RED */
+				/*Right left case */
 				if(node == node->parent->left)
 				{
 					/* Node on parent's right */
 					node = node->parent;
-					bst_rotate_left(node, tree);
+					bst_rotate_right(node, tree);
 				}
 				/* Node is red */
 				node->parent->color = BLACK;
 				node->parent->parent->color = RED;
-				bst_rotate_right(node->parent->parent, tree);
+				bst_rotate_left(node->parent->parent, tree);
 			}
 		}
 	}
 	/* Color the root black */
 	tree->root->color = BLACK;
+	return;
 }
