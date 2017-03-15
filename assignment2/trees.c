@@ -40,7 +40,7 @@ void * bst_first(BST);
 void bst_delete(BST_NODE *, BST *);
 void bst_rotate_left(BST_NODE *, BST *);
 void bst_rotate_right(BST_NODE *, BST *);
-void *red_black_insert(BST_NODE *, BST *);
+void red_black_insert(BST_NODE *, BST *);
 
 
 void * bst_insert(BST_NODE *node, BST *tree)
@@ -298,7 +298,7 @@ void bst_rotate_right(BST_NODE *node, BST *tree)
 	return;
 }
 
-void *red_black_insert(BST_NODE *node, BST *tree)
+void red_black_insert(BST_NODE *node, BST *tree)
 {
 	/* First insert the node in tree as usual. Then restore red-black property */
 	BST_NODE *inserted = NULL;
@@ -324,7 +324,7 @@ void *red_black_insert(BST_NODE *node, BST *tree)
 			{
 				/* Change colors of parent, uncle to black and grandparent to red*/
 				node->parent->color = BLACK;
-				uncle->colour = BLACK;
+				uncle->color = BLACK;
 				node->parent->parent->color = RED;
 				node = node->parent->parent;
 			}
@@ -354,7 +354,7 @@ void *red_black_insert(BST_NODE *node, BST *tree)
 			{
 				/* Change colors of parent, uncle to black and grandparent to red*/
 				node->parent->color = BLACK;
-				uncle->colour = BLACK;
+				uncle->color = BLACK;
 				node->parent->parent->color = RED;
 			}
 			else

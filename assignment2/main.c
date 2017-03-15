@@ -287,19 +287,102 @@ void init_scheduler_comn(uint32_t policy, uint32_t slice_size, Feed_Jobs method,
 }
 
 
-void feed_fcfs(CLL * root)
+void feed_fcfs(CLL * incoming_job_queue)
 {
 	JOB *job=NULL;
+	JOB *current_job = NULL;
+	TIMESTAMP *ts = NULL;
 
-	for(job = (JOB *)NEXT_IN_LIST(*root);
-		job != NULL;
-		job = (JOB *)NEXT_IN_LIST(job->node))
+	/* Put incoming jobs at the end of queue */
+	if((*incoming_job_queue).next != (*incoming_job_queue).self)
 	{
-		TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
-					job->burst_time, job->priority, job->is_background);
+		for(job = (JOB *)NEXT_IN_LIST(*incoming_job_queue);
+			job != NULL;
+			job = (JOB *)NEXT_IN_LIST(*incoming_job_queue))
+		{
+			REMOVE_FROM_LIST(job->node);
+			INSERT_BEFORE(job->node, scheduler.job_scheduler.fcfs.comn.pending_jobs_queue);
+			TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
+						job->burst_time, job->priority, job->is_background);
+		}
 	}
+	/* There is no preemption, so each job must run to completion */
+	current_job = scheduler.job_scheduler.fcfs.comn.job_in_service;
+	if(current_job==NULL)
+	{
+		/* No job in CPU. Pluck one from queue */
+		current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.fcfs.comn.pending_jobs_queue);
+		if(current_job!=NULL)
+		{
+			REMOVE_FROM_LIST(current_job->node);
+			ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+			if(ts==NULL)
+			{
+				ERROR("Error allocating memory for preserving state of job.\n");
+				exit(0);
+			}
+			ts->ts = scheduler.clock_scheduler.ticks;
+			INIT_CLL_NODE(ts->node, ts);
+			INSERT_BEFORE(ts->node, current_job->ts_root);
+			current_job->start_time = scheduler.clock_scheduler.ticks;
+			current_job->run_time = 0;
+
+			TRACE("Schedule %d at %d\n", current_job->pid,  scheduler.clock_scheduler.ticks);
+		}
+	}
+	else
+	{
+		/* There is a job executing. Has it completed execution? */
+		current_job->run_time++;
+		if(current_job->run_time==current_job->burst_time)
+		{
+			/* Pass it to sink module */
+			//TODO
+			current_job->finish_time = scheduler.clock_scheduler.ticks;
+			TRACE("Job %d finished at %d\n", current_job->pid, current_job->finish_time);
+			/* Remove its time stamps */
+			ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+			while(ts != NULL)
+			{
+				//TRACE("Scheduled at %d\n", ts->ts);
+				REMOVE_FROM_LIST(ts->node);
+				free(ts);
+				ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+			}			
+			free(current_job);
+
+			/* Schedule next job.*/
+			/* Pop next job from queue and update its service in time. */
+			current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.fcfs.comn.pending_jobs_queue);
+			if(current_job!=NULL)
+			{
+				REMOVE_FROM_LIST(current_job->node);
+				ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+				if(ts==NULL)
+				{
+					ERROR("Error allocating memory for preserving state of job.\n");
+					exit(0);
+				}
+				ts->ts = scheduler.clock_scheduler.ticks;
+				INIT_CLL_NODE(ts->node, ts);
+				INSERT_BEFORE(ts->node, current_job->ts_root);
+				if(current_job->start_time==-1)
+				{
+					/* Scheduled for the first time */
+					current_job->start_time = scheduler.clock_scheduler.ticks;
+					current_job->run_time = 0;
+				}
+				TRACE("Schedule %d \n", current_job->pid);
+			}
+			/* Else we have nothing to do for now. */
+		}
+		/* By now, either an IDLE CPU has been fed a job. Or, an already running job continues to run.
+		   Or, an already running job finishes execution and next job if available is scheduled. */
+	}
+	scheduler.job_scheduler.fcfs.comn.job_in_service = current_job;
 	return;
 }
+
 void feed_sjf_np(CLL *incoming_job_queue)
 {
 
