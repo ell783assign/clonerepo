@@ -1,0 +1,26 @@
+void feed_fcfs(CLL *incoming_job_queue)
+{
+	/* Initiate a job list
+	* Loop1: Start a loop which runs until dispatcher has no more jobs to dispatch
+	    * Is a job finishing this instant?
+	        * Yes,
+	            * update this time as ending of the job to help with the Gantt chart creation 
+	            * Is a job arriving this instant?
+	                * Yes,
+	                    * Put it at the end of the pending_jobs_queue after sorting with pid
+            * No,
+                * Is a job arriving this instant?
+                    * Yes,
+                        * Put it at the end of the pending_jobs_queue after sorting with pid
+                    * No, 
+                        * Is a job running already?
+                            * Yes,
+                                * increment its run_time, clock
+                            * No,
+                                * pick the job at the beginning of the pending_jobs_queue as the current job
+                                * remove the job from pending_jobs_queue
+                                * start the job and update its start_time with scheduler clock ticks at the instant
+                                * increment its run_time, clock
+    */
+	return;
+}

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stddef.h>
 
 #define TRUE  		(uint32_t)1
 #define FALSE 		(uint32_t)0

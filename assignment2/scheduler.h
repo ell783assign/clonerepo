@@ -41,6 +41,9 @@ typedef struct circular_linked_list
 #define NEXT_IN_LIST(NODE)						\
 	(NODE).next->self
 
+#define PREV_IN_LIST(NODE)						\
+	(NODE).prev->self
+
 typedef struct reschedule_timing
 {
 	CLL node;
@@ -60,6 +63,8 @@ typedef struct job
 	int32_t start_time;
 	int32_t run_time;
 	int32_t finish_time;
+	int32_t remaining_time; /* Added just so that we can sort array in SJF by it (for generic nature of insert sort algo)*/
+	int32_t vruntime;
 	CLL ts_root;
 }JOB;
 
@@ -152,6 +157,7 @@ typedef struct multilevel_feedback
 typedef struct cfs
 {
 	JOB_SCHEDULER_COMN comn;
+	BST tree;
 }CFS_SCHED;
 
 typedef struct _job_scheduler

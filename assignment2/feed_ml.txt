@@ -1,0 +1,53 @@
+void feed_ml(CLL *incoming_job_queue)
+{
+    /*
+     * Initiate job list
+     * 
+     * Discussion: The processes can be classified into groups based on property like process type,
+     * CPU time, IO access, memory size, etc. One general classification of the processes is foreground
+     * processes and background processes. Foreground processes have more priority over processes in 
+     * background. The background queue can't be run until foreground queue is empty.
+     * The foreground processes can be scheduled by `RR` whereas background processes can be
+     * scheduled by `FCFS`. For the sake of simplicity, both can be `RR` or `FCFS` as well.
+     * 
+     * Create a `pending_jobs_queue_fg`, Update it from pending_jobs_queue
+     * Create a `pending_jobs_queue_bg`, Update it from pending_jobs_queue
+     * 
+     * Loop1: Start a loop which runs until dispatcher has no more jobs to dispatch
+        * Monitor pending_jobs_queue_fg (fcfs internally)
+        * Is a job finishing this instant?
+            * Yes, 
+                * update this time as ending of the job to help with the Gantt chart creation
+        * Monitor pending_jobs_queue_bg (fcfs internally)
+                    * Is a job finishing this instant?
+                        * Yes,
+                            * update this time as ending of the job to help with the Gantt chart creation
+                        * Is a job arriving this instant?
+                            * Yes,
+                                * Put it at the end of the pending_jobs_queue_bg after sorting it with pid
+                            * No,
+                                * Is a job running already?
+                                    * Yes,
+                                        * Put it at the beginning of pending_jobs_queue_fg
+        * Monitor pending_jobs_queue_fg
+        * Is a job running already?
+            * Yes,
+                * Is a job arriving this instant?
+                    * Yes,
+                        * Put it at the end of the pending_jobs_queue_fg after sorting with pid
+                * increment its run_time, clock
+            * No,
+                * Is the queue empty?
+                    * Yes,
+                        * pick the job at the beginning of the pending_jobs_queue_bg as the current job
+                        * remove the job from pending_jobs_queue_bg
+                        * start the job and update its start_time with scheduler clock ticks at the instant
+                        * increment its run_time, clock
+                    * No,
+                        * pick the job at the beginning of the pending_jobs_queue_fg as the current job
+                        * remove the job from pending_jobs_queue_fg
+                        * start the job and update its start_time with scheduler clock ticks at the instant
+                        * increment its run_time, clock
+     */
+    return;
+}

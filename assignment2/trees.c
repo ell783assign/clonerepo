@@ -41,7 +41,9 @@ void bst_delete(BST_NODE *, BST *);
 void bst_rotate_left(BST_NODE *, BST *);
 void bst_rotate_right(BST_NODE *, BST *);
 void red_black_insert(BST_NODE *, BST *);
+void red_black_delete(BST_NODE *, BST *);
 
+int32_t compare_int(void *, void *); 
 
 void * bst_insert(BST_NODE *node, BST *tree)
 {
@@ -54,8 +56,11 @@ void * bst_insert(BST_NODE *node, BST *tree)
 	if(inserted!= NULL)
 	{
 		/* Cannot insert, there already exists an entry */
-		inserted = NULL;
-		goto EXIT_LABEL;
+		if(node->content == inserted->content)
+		{
+			inserted = NULL;
+			goto EXIT_LABEL;
+		}
 	}
 	/* else, try to insert */
 	inserted = tree->root;
@@ -68,7 +73,8 @@ void * bst_insert(BST_NODE *node, BST *tree)
 			/* Move left */
 			inserted = inserted->left;
 		}
-		else if(comparison_result>0)
+		/* So that same key guys get FCFS traversal. */
+		else if(comparison_result>=0)
 		{
 			/* Move right */
 			inserted = inserted->left;	
@@ -229,43 +235,6 @@ void bst_delete(BST_NODE *node, BST *tree)
 	return;
 }
 
-void *bst_first(BST tree)
-{
-	return (tree.first);
-}
-
-void bst_rotate_left(BST_NODE *node, BST *tree)
-{
-	/* This code ignores the possibility that someone will try to rotate left around a node that is rightmost */
-	BST_NODE *right_child=NULL;
-
-	right_child = node->right;
-	if(right_child->left != NULL)
-	{
-		right_child->left->parent = node;	
-	}
-	right_child->parent = node->parent; /* Could be root too */
-	if(right_child->parent == NULL)
-	{
-		tree->root = right_child;
-	}
-	else /* Not root */
-	{
-		if(node == node->parent->left)
-		{
-			/* Non-root and left child of parent */
-			node->parent->left = right_child;
-		}
-		else
-		{	
-			/* Non-root and right child of parent */
-			node->parent->right = right_child;
-		}
-	}
-	right_child->left = node;
-	node->parent = right_child;
-}
-
 void bst_rotate_right(BST_NODE *node, BST *tree)
 {
 	/* Rotate right about node */
@@ -377,4 +346,119 @@ void red_black_insert(BST_NODE *node, BST *tree)
 	/* Color the root black */
 	tree->root->color = BLACK;
 	return;
+}
+
+static void deletion_recurse(BST_NODE *node, BST *tree)
+{
+	if(node->right==NULL && node->left != NULL)
+	{
+		/* Replace contents of node by its left child's content */
+		node->content = node->left->content;	
+		deletion_recurse(node->left, tree);
+	}
+	else if(node->right!=NULL)
+	{
+		/* Make right child its replacement and recursively delete it */
+		node->content = node->right->content;
+		deletion_recurse(node->right, tree);
+	}
+	else
+	{
+		/* Both left and right are NULL. */
+		if(node->parent == NULL)
+		{
+			/* I am groot.*/
+			tree->root = NULL;
+		}
+		else
+		{
+			if(node == node->parent->left)
+			{
+				node->parent->left = NULL;
+			}
+			else
+			{
+				node->parent->right = NULL;	
+			}
+			free(node);
+		}
+	}
+	return;
+}
+
+void *bst_first(BST tree)
+{
+	return (tree.first);
+}
+
+void bst_rotate_left(BST_NODE *node, BST *tree)
+{
+	/* This code ignores the possibility that someone will try to rotate left around a node that is rightmost */
+	BST_NODE *sibling = NULL;
+
+	BST_NODE *right_child=NULL;
+
+	right_child = node->right;
+	if(right_child->left != NULL)
+	{
+		right_child->left->parent = node;	
+	}
+	right_child->parent = node->parent; /* Could be root too */
+	if(right_child->parent == NULL)
+	{
+		tree->root = right_child;
+	}
+	else /* Not root */
+	{
+		if(node == node->parent->left)
+		{
+			/* Non-root and left child of parent */
+			node->parent->left = right_child;
+		}
+		else
+		{	
+			/* Non-root and right child of parent */
+			node->parent->right = right_child;
+		}
+		if(node->color == BLACK && node->parent->color == BLACK)
+		{
+			/* Look into the sibling */
+
+		}
+	}
+	right_child->left = node;
+	node->parent = right_child;
+}
+
+void red_black_delete(BST_NODE *node, BST *tree)
+{
+ 	BST_NODE *backup = (BST_NODE *)malloc(sizeof(BST_NODE));
+	if(!backup)
+	{
+		fprintf(stderr, "Could not alloc memory.\n");
+		exit(0);
+	}
+	memcpy(node, backup, sizeof(BST_NODE));
+
+	deletion_recurse(node, tree);
+
+}
+
+int32_t compare_int(void *aa, void *bb)
+{
+	int32_t key1 = (int32_t) *aa;
+	int32_t key2 = (int32_t) *bb;
+
+	if(key1<key2)
+	{
+		return -1;
+	}
+	else if(key1>key2)
+	{
+		return 1;
+	}
+	else
+	{
+		return 0;
+	}
 }
