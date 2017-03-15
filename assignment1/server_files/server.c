@@ -1,7 +1,7 @@
 #include <utils.h>
 #include <cli_interface.h>
 int32_t init_transport_connections(uint32_t);
-
+int32_t handle_client(int32_t );
 int32_t handle_incoming_data(int32_t );
 int32_t handle_put(char *, char *, int32_t, uint32_t *, char **);
 int32_t handle_get(char *, uint32_t *, char **);
@@ -17,26 +17,17 @@ enum ret_codes
 	__MAX_RET_CODE__
 };
 
-/**
- * A single connection instance
- */
-typedef struct connection_cb
+int32_t current_connections = 0;
+
+void handle_child_termination(int32_t signum)
 {
-	/**
-	 * Socket Descriptor.
-	 */
-	int32_t sock_fd;
-
-	/**
-	 * Incoming Address of source.
-	 */
-	struct sockaddr_in addr;
-
-	/**
-	 * Address length
-	 */
-	 socklen_t length;
-}CONNECTION_CB;
+	ENTRY();
+	int32_t status;
+	current_connections--;
+	TRACE("A child exited. Active Connections = %d\n", current_connections);
+	wait (&status);
+	EXIT();
+}
 
 /**
  * @brief      Program to open a UDP listen socket for FTP server.
@@ -48,15 +39,18 @@ typedef struct connection_cb
  */
 int32_t main(int32_t argc, char *argv[])
 {
+	ENTRY();
 	int32_t ret_val;
 
 	uint32_t bind_port = 5000; /**< Default value */
 
 	int32_t sock_fd;	/**< Listen Socket FD */
-	struct sockaddr_in server_address; /**< Server Listen Address */
 
-	CONNECTION_CB connection_fds[MAX_CONNECTIONS]; /**< MAP of open incoming sessions */
-	int32_t next_available_fd_slot = 0;
+	int32_t child_fd;	/**< fd for new socket connection passed to child process */
+	struct sockaddr_in server_address; /**< Server Listen Address */
+	struct sockaddr_in incoming_address;
+	int32_t incoming_length;
+
 	int32_t ii;
 
 	fd_set persistent_set, fds;
@@ -64,15 +58,16 @@ int32_t main(int32_t argc, char *argv[])
 	int32_t num_fd_ready;
 	int32_t max_fd;
 
+	struct sigaction sigchld_callback;
+
 	if(argc == 2)
 	{
 		bind_port = atoi(argv[1]);
 	}
 
-	for(ii=0;ii<MAX_CONNECTIONS;ii++)
-	{
-		connection_fds[ii].sock_fd=-1;
-	}
+	memset (&sigchld_callback, 0, sizeof (sigchld_callback)); 
+	sigchld_callback.sa_handler = &handle_child_termination; 
+  	sigaction (SIGCHLD, &sigchld_callback, NULL); 
 
 	sock_fd = init_transport_connections(bind_port);
 	EXIT_ON_ERROR(NULL, sock_fd, GT, 0, FALSE);
@@ -103,48 +98,59 @@ int32_t main(int32_t argc, char *argv[])
 			if(FD_ISSET(sock_fd, &fds))
 			{
 				TRACE("Incoming connection request.\n");
-				next_available_fd_slot = next_available_fd_slot % MAX_CONNECTIONS;
-				connection_fds[next_available_fd_slot].sock_fd=accept(	sock_fd, 
-																		(struct sockaddr *)&connection_fds[next_available_fd_slot].addr, 
-																		&connection_fds[next_available_fd_slot].length);
-				LOG_EXCEPTION("Error accepting connection.", connection_fds[next_available_fd_slot].sock_fd, GTE, 0, TRUE);
-				FD_SET(connection_fds[next_available_fd_slot].sock_fd, &persistent_set);
-
-				TRACE("New connection accepted on descriptor: %d\n",connection_fds[next_available_fd_slot].sock_fd);
-				if(max_fd<connection_fds[next_available_fd_slot].sock_fd)
+				if(current_connections==MAX_CONNECTIONS)
 				{
-					TRACE("Update max_fd to %d\n",connection_fds[next_available_fd_slot].sock_fd);
-					max_fd = connection_fds[next_available_fd_slot].sock_fd;
+					LOG_EXCEPTION("Server full. Cannot accept new connection right now!", 0, EQ, -1, FALSE);
+					continue;
 				}
-				next_available_fd_slot++;
-			}
-			for(ii=0;ii<MAX_CONNECTIONS;ii++)
-			{
-				if(connection_fds[ii].sock_fd > 0 && FD_ISSET(connection_fds[ii].sock_fd, &fds))
+				child_fd=accept(sock_fd, 
+								(struct sockaddr *)&incoming_address, 
+								&incoming_length);
+				LOG_EXCEPTION("Error accepting connection.", child_fd, GTE, 0, TRUE);
+
+				/* Now, fork the process and let the child process handle this request */
+				/**
+				 * Forking has an advantage over multithreading in this particular application 
+				 * in terms of reducing complexity when dealing with multiple clients.
+				 * 
+				 * Since each client may change their cwd using cd, it would be more complex
+				 * to maintain state of their sessions in software.
+				 * 
+				 * Instead, let each one have a separate process and in that way, the OS
+				 * does the book keeping for us.
+				 */
+				ret_val = fork();
+				if(ret_val==-1)
 				{
-					/* TODO: Read data */
-					TRACE("Data on connection socket.\n");
-					ret_val = handle_incoming_data(connection_fds[ii].sock_fd);
-					if(ret_val != OK)
-					{
-						if(ret_val == CLOSED)
-						{
-							TRACE("Remove socket from descriptor set\n");
-							FD_CLR(connection_fds[ii].sock_fd, &persistent_set);
-							close(connection_fds[ii].sock_fd);
-							connection_fds[ii].sock_fd = -1;
-						}
-						else
-						{
-							break;
-						}
-					}
+					LOG_EXCEPTION("Error creating new fork to handle request.", ret_val, GTE, 0, TRUE);
+					close(child_fd);
+
+				}
+				else if(ret_val==0)
+				{
+					/* Inside child */
+					/* Close listen socket for child */
+					TRACE("In child. Close listen sock.\n");
+					close(sock_fd);
+					sock_fd = -1;
+					ret_val = handle_client(child_fd);
+					goto EXIT_LABEL;
+				}
+				else
+				{
+					/* Parent process */
+					TRACE("In parent. Close client sock.\n");
+					close(child_fd);
+					child_fd = -1;
+					current_connections++;
 				}
 			}
 		}
 	}
 
-	return(0);
+EXIT_LABEL:
+	EXIT();
+	return(ret_val);
 }
 
 
@@ -157,6 +163,7 @@ int32_t main(int32_t argc, char *argv[])
  */
 int32_t init_transport_connections(uint32_t bind_port)
 {
+	ENTRY();
 	int32_t ret_val;
 	int32_t rebind;
 
@@ -184,12 +191,68 @@ int32_t init_transport_connections(uint32_t bind_port)
 	ret_val = listen(sock_fd, NUM_QUEUED_CONNECTIONS);
 	EXIT_ON_ERROR("Failed to listen on interface.", ret_val, EQ, 0, TRUE);
 	TRACE("Listening...\n");
-
+	
+	EXIT();
 	return(sock_fd);
+}
+
+int32_t handle_client(int32_t sock_fd)
+{
+	ENTRY();
+	int32_t ret_val = 0;
+	fd_set persistent_set, fds;
+	struct timeval timeout_info;
+	int32_t num_fd_ready;
+	int32_t max_fd;
+
+	FD_ZERO(&persistent_set);
+	FD_SET(sock_fd, &persistent_set);
+
+	max_fd = sock_fd;
+	/* Start endless loop to serve as FTP */
+	while(1)
+	{
+		FD_ZERO(&fds);
+		fds = persistent_set;
+
+		/* 0  timeout leads to 100% CPU utilization all the time. */
+		timeout_info.tv_sec = 0;
+		timeout_info.tv_usec = 5000; /* Wait for 5 milliseconds before timeout */
+
+		num_fd_ready = select(max_fd+1, &fds, NULL, NULL, &timeout_info);
+		if(num_fd_ready<0)
+		{
+			perror("Exception event on select()");
+		}
+		else
+		{
+			if(FD_ISSET(sock_fd, &fds))
+			{
+				/* TODO: Read data */
+				TRACE("Data on connection socket.\n");
+				ret_val = handle_incoming_data(sock_fd);
+				if(ret_val != OK)
+				{
+					if(ret_val == CLOSED)
+					{
+						TRACE("Remove socket from descriptor set\n");
+						FD_CLR(sock_fd, &persistent_set);
+						close(sock_fd);
+						sock_fd = -1;
+					}
+					break;
+				}
+			}
+		}
+	}
+	/* Closing child process */
+	EXIT();
+	return(ret_val);
 }
 
 int32_t handle_incoming_data(int32_t sock_fd)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 
 	int32_t num_reads = 0;
@@ -347,15 +410,17 @@ int32_t handle_incoming_data(int32_t sock_fd)
 	{
 		free(msg);
 	}
-
+	ret_val = 0;
 	
 
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);
 }
 
 int32_t handle_get(char *filename, uint32_t *length, char **msg)
 {
+	ENTRY();
 	TRACE("%s\n", filename);
 	int32_t ret_val = 0;
 
@@ -369,11 +434,13 @@ int32_t handle_get(char *filename, uint32_t *length, char **msg)
 
 
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);	
 }
 
 int32_t handle_put(char *filename, char *contents, int32_t file_length, uint32_t *length, char **msg)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 	TRACE("File Name:%s\t Length: %d\n", filename, file_length);
 	ret_val = write_file_to_disk(filename, contents, file_length);
@@ -385,5 +452,6 @@ int32_t handle_put(char *filename, char *contents, int32_t file_length, uint32_t
 	*length = 0;
 	*msg = NULL;
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);	
 }

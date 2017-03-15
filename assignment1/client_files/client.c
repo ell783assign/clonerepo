@@ -16,6 +16,7 @@ int32_t sock_fd;
  */
 int32_t main(int32_t argc, char *argv[])
 {
+	ENTRY();
 	int32_t ret_val;
 
 	uint32_t dest_port = 5000; /**< Default value */
@@ -157,6 +158,7 @@ int32_t main(int32_t argc, char *argv[])
 	}
 
 EXIT_LABEL:	
+	EXIT();
 	return(0);
 }
 
@@ -170,6 +172,7 @@ EXIT_LABEL:
  */
 int32_t connect_to_server(uint32_t connect_port, char *dest_address)
 {
+	ENTRY();
 	int32_t ret_val;
 
 	int32_t sock_fd;
@@ -191,21 +194,25 @@ int32_t connect_to_server(uint32_t connect_port, char *dest_address)
 	EXIT_ON_ERROR("Failed to connect to server address.", ret_val, EQ, 0, TRUE);
 	TRACE("Connected to server...\n");
 
+	EXIT();
 	return(sock_fd);
 }
 
 
 void do_close(int32_t fd)
 {
+	ENTRY();
 	if(fd > 0)
 	{
 		close(fd);
 	}
+	EXIT();
 	return;
 }
 
 int32_t do_ls(uint32_t *length, char **cmd_msg)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
 
@@ -291,12 +298,13 @@ EXIT_LABEL:
 		free(ls_result);
 		ls_result = NULL;
 	}
-
+	EXIT();
 	return(ret_val);	
 }
 
 int32_t do_cd(char *path, uint32_t *length, char **cmd_msg)
 {
+	ENTRY();
 	TRACE("%s\n", path);
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
@@ -359,7 +367,7 @@ int32_t do_cd(char *path, uint32_t *length, char **cmd_msg)
 	}
 	if(!msg->hdr.is_request && !(msg->hdr.response == 1))
 	{
-		if(!msg->hdr.is_request)
+		if(msg->hdr.is_request)
 		{
 			LOG_EXCEPTION("Malformed reply!", 0, EQ, 1, FALSE);
 			ret_val = -1;
@@ -383,11 +391,13 @@ EXIT_LABEL:
 		ls_result = NULL;
 	}
 
+	EXIT();
 	return(ret_val);	
 }
 
 int32_t do_chmod(int32_t perm[3], char *path, uint32_t *length, char **cmd_msg)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
 
@@ -475,12 +485,13 @@ EXIT_LABEL:
 		free(ls_result);
 		ls_result = NULL;
 	}
-
+	EXIT();
 	return(ret_val);	
 }
 
 int32_t do_put(char *file_name, uint32_t *length, char **err_msg_ptr)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 
 	char *buf=NULL;
@@ -569,11 +580,13 @@ int32_t do_put(char *file_name, uint32_t *length, char **err_msg_ptr)
 
 
 EXIT_LABEL:	
+	EXIT();
 	return ret_val;
 }
 
 int32_t do_get(char *file_name, uint32_t *length, char **err_msg_ptr)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 
 	char *buf=NULL;
@@ -654,5 +667,6 @@ int32_t do_get(char *file_name, uint32_t *length, char **err_msg_ptr)
 		goto EXIT_LABEL;
 	}
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);	
 }
