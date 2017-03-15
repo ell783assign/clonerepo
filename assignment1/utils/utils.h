@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #include <sys/select.h>
 #include <sys/types.h>
@@ -25,13 +26,17 @@
 int32_t alt_gets(char *);
 
 #ifdef BUILD_DEBUG
-#define TRACE(...) 	fprintf(stderr, "TRACE  \t" __VA_ARGS__)
-#define WARN(...) 	fprintf(stderr, "WARNING\t"__VA_ARGS__)
-#define ERROR(...)  fprintf(stderr, "ERROR  \t"__VA_ARGS__)
+#define TRACE(...) 	fprintf(stderr, "TRACE  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define WARN(...) 	fprintf(stderr, "WARN  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define ERROR(...)  fprintf(stderr, "ERROR  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define ENTRY()		fprintf(stderr, "TRACE \t%10s\t%3d Enter {\n",__func__, __LINE__);
+#define EXIT()		fprintf(stderr, "TRACE \t%10s\t%3d Exit }\n",__func__, __LINE__);
 #else
 #define TRACE(...) 	
 #define WARN(...) 	
 #define ERROR(...) 
+#define ENTRY()
+#define EXIT()
 #endif
 
 #define TRUE  		(uint32_t)1

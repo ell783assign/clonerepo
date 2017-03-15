@@ -3,6 +3,7 @@
 
 int32_t alt_gets(char *buffer)
 {
+
 	char buf[MAXCMDLENGTH];
 
 	memset(buf, '\0', sizeof(buf));
@@ -25,6 +26,7 @@ int32_t alt_gets(char *buffer)
 }
 int32_t read_file_to_buffer(char *name, char **msg_buf, int32_t *length)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 
 	int32_t size_of_file = 0;
@@ -77,11 +79,13 @@ EXIT_LABEL:
 		fclose(fp);
 		fp = NULL;
 	}
+	EXIT();
 	return(ret_val);	
 }
 
 int32_t write_file_to_disk(char *name, char *msg_buf, int32_t length)
 {
+	ENTRY();
 	TRACE("length %d\n", length);
 	int32_t ret_val = 0;
 	int32_t size_written = 0;
@@ -107,11 +111,13 @@ EXIT_LABEL:
 		fclose(fp);
 		fp = NULL;
 	}
+	EXIT();
 	return(ret_val);
 }
 
 int32_t send_data(int32_t sock_fd, uint32_t length, char *buf)
 {
+	ENTRY();
 	int32_t num_writes = 0;
 	int32_t bytes_sent = 0;
 
@@ -127,11 +133,13 @@ int32_t send_data(int32_t sock_fd, uint32_t length, char *buf)
 		}
 		num_writes += bytes_sent;
 	}
+	EXIT();
 	return(num_writes);
 }
 
 int32_t receive_data(int32_t sock_fd, uint32_t length, char *buf)
 {
+	ENTRY();
 	int32_t num_reads = 0;
 	int32_t bytes_read = 0;
 
@@ -153,12 +161,14 @@ int32_t receive_data(int32_t sock_fd, uint32_t length, char *buf)
 		}
 		num_reads += bytes_read;
 	}
+	EXIT();
 	return(num_reads);	
 }
 
 
 int32_t do_lls(uint32_t *length, char **msg)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 
 	char *return_buffer = (char *)malloc(sizeof(char) * 1024);
@@ -217,11 +227,13 @@ int32_t do_lls(uint32_t *length, char **msg)
 	*length = run_length+1;/*1 for NULL character */
 
 EXIT_LABEL:
+	EXIT();
 	return 	(ret_val);
 }
 
 int32_t do_lcd(char *path, uint32_t *length, char **msg)
 {
+	ENTRY();
 	TRACE("cd %s\n", path);
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
@@ -235,7 +247,39 @@ int32_t do_lcd(char *path, uint32_t *length, char **msg)
 		{
 			EXIT_ON_ERROR("Error allocating memory.", 0, NEQ, 0, FALSE);
 		}
-		sprintf(err_msg, "Error occurred while changing directory.");
+		switch(errno)
+		{
+			case EACCES:
+			sprintf(err_msg, "Insufficient permissions to change to this path.");
+			break;
+
+			case EFAULT:
+			sprintf(err_msg, "Invalid Path.");
+			break;
+
+			case EIO:
+			sprintf(err_msg, "I/O error.");
+			break;
+
+			case ELOOP:
+			sprintf(err_msg, "Too many symbolic links were encountered in resolving path.");
+			break;
+
+			case ENAMETOOLONG:
+			sprintf(err_msg, "Name too long.");
+			break;			
+
+			case ENOENT:
+			sprintf(err_msg, "File/Path does not exist.");
+			break;	
+
+			case ENOTDIR:
+			sprintf(err_msg, "A component of path is not a directory.");
+			break;			
+
+			default:
+			sprintf(err_msg, "Error occurred while changing directory.");
+		}
 		*msg = err_msg;
 		*length = strlen(err_msg)+1;
 	}
@@ -244,12 +288,14 @@ int32_t do_lcd(char *path, uint32_t *length, char **msg)
 		*length = 0;
 		*msg = NULL;
 	}
-
+	
+	EXIT();
 	return(ret_val);
 }
 
 int32_t do_lchmod(int32_t perm[3], char * f_name, uint32_t *length, char **msg)
 {
+	ENTRY();
 	/** https://www.gnu.org/software/libc/manual/html_node/Permission-Bits.html */
 	int32_t ret_val = 0;
 	char *err_msg = NULL;
@@ -285,6 +331,6 @@ int32_t do_lchmod(int32_t perm[3], char * f_name, uint32_t *length, char **msg)
 		*msg = NULL;
 	}
 	
-
+	EXIT();
 	return (ret_val);
 }

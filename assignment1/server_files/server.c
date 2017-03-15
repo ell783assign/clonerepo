@@ -21,10 +21,12 @@ int32_t current_connections = 0;
 
 void handle_child_termination(int32_t signum)
 {
+	ENTRY();
 	int32_t status;
 	current_connections--;
 	TRACE("A child exited. Active Connections = %d\n", current_connections);
 	wait (&status);
+	EXIT();
 }
 
 /**
@@ -37,6 +39,7 @@ void handle_child_termination(int32_t signum)
  */
 int32_t main(int32_t argc, char *argv[])
 {
+	ENTRY();
 	int32_t ret_val;
 
 	uint32_t bind_port = 5000; /**< Default value */
@@ -146,6 +149,7 @@ int32_t main(int32_t argc, char *argv[])
 	}
 
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);
 }
 
@@ -159,6 +163,7 @@ EXIT_LABEL:
  */
 int32_t init_transport_connections(uint32_t bind_port)
 {
+	ENTRY();
 	int32_t ret_val;
 	int32_t rebind;
 
@@ -186,12 +191,14 @@ int32_t init_transport_connections(uint32_t bind_port)
 	ret_val = listen(sock_fd, NUM_QUEUED_CONNECTIONS);
 	EXIT_ON_ERROR("Failed to listen on interface.", ret_val, EQ, 0, TRUE);
 	TRACE("Listening...\n");
-
+	
+	EXIT();
 	return(sock_fd);
 }
 
 int32_t handle_client(int32_t sock_fd)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 	fd_set persistent_set, fds;
 	struct timeval timeout_info;
@@ -239,11 +246,13 @@ int32_t handle_client(int32_t sock_fd)
 		}
 	}
 	/* Closing child process */
+	EXIT();
 	return(ret_val);
 }
 
 int32_t handle_incoming_data(int32_t sock_fd)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 
 	int32_t num_reads = 0;
@@ -401,15 +410,17 @@ int32_t handle_incoming_data(int32_t sock_fd)
 	{
 		free(msg);
 	}
-
+	ret_val = 0;
 	
 
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);
 }
 
 int32_t handle_get(char *filename, uint32_t *length, char **msg)
 {
+	ENTRY();
 	TRACE("%s\n", filename);
 	int32_t ret_val = 0;
 
@@ -423,11 +434,13 @@ int32_t handle_get(char *filename, uint32_t *length, char **msg)
 
 
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);	
 }
 
 int32_t handle_put(char *filename, char *contents, int32_t file_length, uint32_t *length, char **msg)
 {
+	ENTRY();
 	int32_t ret_val = 0;
 	TRACE("File Name:%s\t Length: %d\n", filename, file_length);
 	ret_val = write_file_to_disk(filename, contents, file_length);
@@ -439,5 +452,6 @@ int32_t handle_put(char *filename, char *contents, int32_t file_length, uint32_t
 	*length = 0;
 	*msg = NULL;
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);	
 }
