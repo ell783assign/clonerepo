@@ -257,12 +257,12 @@ int32_t init_scheduler()
 	scheduler.clock_scheduler.ticks = 0;
 	char *slice_size = NULL;
 	int32_t slice = 2;
-	slice_size = getenv("RR_SCHED_SLICE_SIZE");
+	slice_size = getenv("SCHED_SLICE_SIZE");
 	if(slice_size != NULL)
 	{
 		slice = atoi(slice_size);
-		TRACE("Slice Size=%d\n", slice);
 	}
+	TRACE("Slice Size=%d\n", slice);
 
 	/* initialize each policy scheduler */
 	init_scheduler_comn(FCFS, 0, feed_fcfs, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.fcfs);
@@ -654,54 +654,38 @@ void feed_rr(CLL *incoming_job_queue)
 	}
 	/* Is there a job finishing in this time instant? */
 	current_job = scheduler.job_scheduler.rr.comn.job_in_service;
-	if(current_job != NULL)
+	if(current_job==NULL)
+	{
+		/* IDLE CPU. Find next job if available */
+				/* Pop next job from queue and update its service in time. */
+		current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.rr.comn.pending_jobs_queue);
+		if(current_job!=NULL)
+		{
+			REMOVE_FROM_LIST(current_job->node);
+			ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+			if(ts==NULL)
+			{
+				ERROR("Error allocating memory for preserving state of job.\n");
+				exit(0);
+			}
+			ts->ts = scheduler.clock_scheduler.ticks;
+			INIT_CLL_NODE(ts->node, ts);
+			INSERT_BEFORE(ts->node, current_job->ts_root);
+			current_job->start_time = scheduler.clock_scheduler.ticks;
+			current_job->run_time = 0;
+
+			TRACE("Schedule %d at %d\n", current_job->pid,  scheduler.clock_scheduler.ticks);
+			/* Update next switch time to either current_time+slice*/
+			scheduler.job_scheduler.rr.comn.next_switch = 
+									scheduler.clock_scheduler.ticks + 
+									scheduler.job_scheduler.rr.comn.time_slice;
+		}
+	}
+	else
 	{
 		current_job->run_time++;
-		if(current_job->run_time < current_job->burst_time)
-		{
-			/* Nope, there is still time for it to finish. */
-			/* Has it exhausted the time quanta? */
-			if(scheduler.job_scheduler.rr.comn.next_switch 
-										== scheduler.clock_scheduler.ticks)
-			{
-				/* Swap it out. Move it to the end of pending queue if there is another process which is waiting */
-				if(NEXT_IN_LIST(scheduler.job_scheduler.ml.foreground)!=NULL)
-				{
-					INSERT_BEFORE(current_job->node, 
-								scheduler.job_scheduler.rr.comn.pending_jobs_queue);
-
-					TRACE("Swap %d out at %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
-
-					/* Pop next job from queue and update its service in time. */
-					current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.rr.comn.pending_jobs_queue);
-					if(current_job!=NULL)
-					{
-						REMOVE_FROM_LIST(current_job->node);
-						ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
-						if(ts==NULL)
-						{
-							ERROR("Error allocating memory for preserving state of job.\n");
-							exit(0);
-						}
-						ts->ts = scheduler.clock_scheduler.ticks;
-						INIT_CLL_NODE(ts->node, ts);
-						INSERT_BEFORE(ts->node, current_job->ts_root);
-						if(current_job->start_time==-1)
-						{
-							/* Scheduled for the first time */
-							current_job->start_time = scheduler.clock_scheduler.ticks;
-							current_job->run_time = 0;
-						}
-						TRACE("Swap %d in\n", current_job->pid);
-					}
-					/* Update next switch time to either current_time+slice*/
-					scheduler.job_scheduler.rr.comn.next_switch = 
-										scheduler.clock_scheduler.ticks + 
-										scheduler.job_scheduler.rr.comn.time_slice;
-				}
-			}
-		}
-		else if(current_job->run_time==current_job->burst_time)
+		/* Has the current job finished executing? */
+		if(current_job->run_time==current_job->burst_time)
 		{
 			/* Pass it to sink module */
 			//TODO
@@ -745,41 +729,50 @@ void feed_rr(CLL *incoming_job_queue)
 										scheduler.clock_scheduler.ticks + 
 										scheduler.job_scheduler.rr.comn.time_slice;
 			}
-			/* Else we have nothing to do for now. */
 		}
-		else
+		/* Else, have we exceeded out time slice? */
+		else if(scheduler.job_scheduler.rr.comn.next_switch 
+										== scheduler.clock_scheduler.ticks)
 		{
-			ERROR("Job in scheduler past its execution time!\n");
-			exit(0);
-		}
-	}
-	else
-	{
-		/* There were no jobs. Schedule the head of queue*/
-		/* Pop next job from queue and update its service in time. */
-		current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.rr.comn.pending_jobs_queue);
-		if(current_job!=NULL)
-		{
-			REMOVE_FROM_LIST(current_job->node);
-			ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
-			if(ts==NULL)
+			/* Swap it out. Move it to the end of pending queue if there is another process which is waiting */
+			if(NEXT_IN_LIST(scheduler.job_scheduler.rr.comn.pending_jobs_queue)!=NULL)
 			{
-				ERROR("Error allocating memory for preserving state of job.\n");
-				exit(0);
-			}
-			ts->ts = scheduler.clock_scheduler.ticks;
-			INIT_CLL_NODE(ts->node, ts);
-			INSERT_BEFORE(ts->node, current_job->ts_root);
-			current_job->start_time = scheduler.clock_scheduler.ticks;
-			current_job->run_time = 0;
+				INSERT_BEFORE(current_job->node, 
+							scheduler.job_scheduler.rr.comn.pending_jobs_queue);
 
-			TRACE("Schedule %d at %d\n", current_job->pid,  scheduler.clock_scheduler.ticks);
-			/* Update next switch time to either current_time+slice*/
-			scheduler.job_scheduler.rr.comn.next_switch = 
+				TRACE("Swap %d out at %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+
+				/* Pop next job from queue and update its service in time. */
+				current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.rr.comn.pending_jobs_queue);
+				if(current_job!=NULL)
+				{
+					REMOVE_FROM_LIST(current_job->node);
+					ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+					if(ts==NULL)
+					{
+						ERROR("Error allocating memory for preserving state of job.\n");
+						exit(0);
+					}
+					ts->ts = scheduler.clock_scheduler.ticks;
+					INIT_CLL_NODE(ts->node, ts);
+					INSERT_BEFORE(ts->node, current_job->ts_root);
+					if(current_job->start_time==-1)
+					{
+						/* Scheduled for the first time */
+						current_job->start_time = scheduler.clock_scheduler.ticks;
+						current_job->run_time = 0;
+					}
+					TRACE("Swap %d in\n", current_job->pid);
+				}
+				/* Update next switch time to either current_time+slice*/
+				scheduler.job_scheduler.rr.comn.next_switch = 
 									scheduler.clock_scheduler.ticks + 
 									scheduler.job_scheduler.rr.comn.time_slice;
+			}
 		}
+		/* Else continue doing what we were doing. */
 	}
+	
 	/* By now, either current job is still executing, or has been swapped out or has finished executing */
 	scheduler.job_scheduler.rr.comn.job_in_service = current_job;
 	if(scheduler.job_scheduler.rr.comn.job_in_service != NULL)
