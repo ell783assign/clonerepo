@@ -54,10 +54,6 @@ void print_output_stat(int num_jobs, JOB *job_completed)
         /* No more jobs shall come now. Print final result */
         if(iteration_global==num_jobs_global)
         {
-            turnaround_time = job->finish_time - job->start_time;
-            waiting_time = turnaround_time - job->burst_time;
-            p.sum_waiting_time += waiting_time;
-            p.sum_turnaround_time += turnaround_time;
             printf("\n*****************************************************************\n");
             printf("\n\nAverage waiting time: %.5f\nAverage turnaround time: %.5f\n\n", 1.0*p.sum_waiting_time/num_jobs_global, 1.0*p.sum_turnaround_time/num_jobs_global);
         }
