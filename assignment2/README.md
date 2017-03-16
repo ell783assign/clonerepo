@@ -45,3 +45,17 @@ This assignment gives an important insight into a typical way a CPU schedulign a
 ## Developers' section   
 **fcfs.c** - First-come-first-served implementation
 * * *
+
+### Usage
+
+To set the scheduler slice size of policies that use it (Round Robin, Multilevel Queues etc.) default size is set to 2 epochs. This can be altered by setting the environment variable. Like, to set it to 4 epochs use the following in the terminal:
+
+```
+export SCHED_SLICE_SIZE=4
+```
+
+Also, for multilevel queues, maximum age is defined as the maximum number of time slices that the job can stay in the second queue without being scheduled. This is defaulted to 1. Can be changed by setting SCHED_MAX_AGE_MULTIPLIER using the above method.
+
+```
+export SCHED_MAX_AGE_MULTIPLIER=7
+```
