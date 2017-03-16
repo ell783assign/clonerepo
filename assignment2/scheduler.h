@@ -154,6 +154,11 @@ typedef struct multilevel
 typedef struct multilevel_feedback
 {
 	JOB_SCHEDULER_COMN comn;
+	CLL first;
+	CLL second;
+	int32_t age_list_size;
+	int32_t processes_in_age_list;
+	CLL age_list; /* It is an array of jobs with size equal to the max age that any process it allowed to take. */
 }ML_FB_SCHED;
 
 typedef struct cfs

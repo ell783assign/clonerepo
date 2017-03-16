@@ -256,13 +256,27 @@ int32_t init_scheduler()
 {
 	scheduler.clock_scheduler.ticks = 0;
 	char *slice_size = NULL;
+	char *max_age_val = NULL;
 	int32_t slice = 2;
+
+	int32_t max_age = 7;
+
+	JOB *job = NULL;
+	int32_t i;
+
 	slice_size = getenv("SCHED_SLICE_SIZE");
 	if(slice_size != NULL)
 	{
 		slice = atoi(slice_size);
 	}
 	TRACE("Slice Size=%d\n", slice);
+
+	max_age_val = getenv("SCHED_MAX_AGE_MULTIPLIER");
+	if(max_age_val!=NULL)
+	{
+		max_age = atoi(max_age_val);
+	}
+	TRACE("Max Age Multiplier=%d\n", max_age);
 
 	/* initialize each policy scheduler */
 	init_scheduler_comn(FCFS, 0, feed_fcfs, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.fcfs);
@@ -280,6 +294,11 @@ int32_t init_scheduler()
 	INIT_CLL_ROOT(scheduler.job_scheduler.ml.background);
 
 	init_scheduler_comn(MF_Q, 0, feed_mfq, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.ml_fb);
+	INIT_CLL_ROOT(scheduler.job_scheduler.ml_fb.first);
+	INIT_CLL_ROOT(scheduler.job_scheduler.ml_fb.second);
+	INIT_CLL_ROOT(scheduler.job_scheduler.ml_fb.age_list);
+	scheduler.job_scheduler.age_list_size = max_age;
+	scheduler.job_scheduler.processes_in_age_list = 0;
 
 	init_scheduler_comn(CFS, 0, feed_cfs, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.cfs);
 	BST_TREE_INIT(scheduler.job_scheduler.cfs.tree, compare_int, offsetof(JOB, vruntime));
@@ -772,7 +791,7 @@ void feed_rr(CLL *incoming_job_queue)
 		}
 		/* Else continue doing what we were doing. */
 	}
-	
+
 	/* By now, either current job is still executing, or has been swapped out or has finished executing */
 	scheduler.job_scheduler.rr.comn.job_in_service = current_job;
 	if(scheduler.job_scheduler.rr.comn.job_in_service != NULL)
@@ -1173,7 +1192,205 @@ void feed_ml(CLL *incoming_job_queue)
 
 void feed_mfq(CLL *incoming_job_queue)
 {
+	JOB *job = NULL;
+	JOB *current_job = NULL;
+	TIMESTAMP *ts = NULL;
 
+	/* Assuming for now that both queues get same time quanta */
+
+	if((*incoming_job_queue).next != (*incoming_job_queue).self)
+	{
+		for(job = (JOB *)NEXT_IN_LIST(*incoming_job_queue);
+			job != NULL;
+			job = (JOB *)NEXT_IN_LIST(*incoming_job_queue))
+		{
+			REMOVE_FROM_LIST(job->node);
+			/* Everything first gets into the first queue and is run at least once. */
+			INSERT_BEFORE(job->node, scheduler.job_scheduler.ml_fb.first);
+			TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
+						job->burst_time, job->priority, job->is_foreground);
+		}
+	}
+	/* Further, if some process in the age list is exceeding threshold, move it to the end of higher queue */
+	current_job = scheduler.job_scheduler.ml_fb.comn.job_in_service;
+	if(current_job==NULL)
+	{
+		/* No currently executing job. Fetch next available job. */
+		current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.ml_fb.first);
+		if(current_job==NULL)
+		{
+			/* No job in high priority queue. Try background queue. */
+			current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.ml_fb.second);
+		}
+		if(current_job!=NULL)
+		{
+			REMOVE_FROM_LIST(current_job->node);
+			ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+			if(ts==NULL)
+			{
+				ERROR("Error allocating memory for preserving state of job.\n");
+				exit(0);
+			}
+			ts->ts = scheduler.clock_scheduler.ticks;
+			INIT_CLL_NODE(ts->node, ts);
+			INSERT_BEFORE(ts->node, current_job->ts_root);
+			current_job->start_time = scheduler.clock_scheduler.ticks;
+			current_job->run_time = 0;
+
+			TRACE("Schedule %d at %d\n", current_job->pid,  scheduler.clock_scheduler.ticks);
+			/* Update next switch time to either current_time+slice*/
+			scheduler.job_scheduler.ml_fb.comn.next_switch = 
+									scheduler.clock_scheduler.ticks + 
+									scheduler.job_scheduler.ml_fb.comn.time_slice;
+		}
+		/* Else there is no job and the scheduler is idle */
+	}
+	else if(current_job != NULL)/* There is some process executing */
+	{
+		/* Has it finished processing? */
+		current_job->run_time++;
+		/* Has it finished executing? */
+		if(current_job->run_time == current_job->burst_time)
+		{
+			/* Yep. Remove it and schedule the next eleigible task. */
+			/* Pass it to sink module */
+			//TODO
+			current_job->finish_time = scheduler.clock_scheduler.ticks;
+			TRACE("Job %d finished at %d\n", current_job->pid, current_job->finish_time);
+			/* Remove its time stamps */
+			ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+			while(ts != NULL)
+			{
+				//TRACE("Scheduled at %d\n", ts->ts);
+				REMOVE_FROM_LIST(ts->node);
+				free(ts);
+				ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+			}			
+			free(current_job);
+
+			/* Schedule next job.*/
+			/* Pop next job from queue and update its service in time. */
+			current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.ml_fb.first);
+			if(current_job==NULL)
+			{
+				current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.ml_fb.second);
+			}
+			if(current_job!=NULL)
+			{
+				REMOVE_FROM_LIST(current_job->node);
+				ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+				if(ts==NULL)
+				{
+					ERROR("Error allocating memory for preserving state of job.\n");
+					exit(0);
+				}
+				ts->ts = scheduler.clock_scheduler.ticks;
+				INIT_CLL_NODE(ts->node, ts);
+				INSERT_BEFORE(ts->node, current_job->ts_root);
+				if(current_job->start_time==-1)
+				{
+					/* Scheduled for the first time */
+					current_job->start_time = scheduler.clock_scheduler.ticks;
+					current_job->run_time = 0;
+				}
+				TRACE("Schedule %d \n", current_job->pid);
+
+				/* Update next switch time to either current_time+slice*/
+				/* This will be applicable only if the round robin queue is in service */
+				scheduler.job_scheduler.ml.comn.next_switch = 
+										scheduler.clock_scheduler.ticks + 
+										scheduler.job_scheduler.ml.comn.time_slice;
+
+			}
+		}
+		/* If currently running job is a foreground task, it is round robined */
+		/* Has the time slice expired? */
+		else if(current_job->is_foreground && scheduler.job_scheduler.ml.comn.next_switch 
+																== scheduler.clock_scheduler.ticks)
+		{
+			/* Swap it out. Move it to the end of pending queue only if there is some other job */
+			if(NEXT_IN_LIST(scheduler.job_scheduler.ml.foreground)!=NULL)
+			{
+				INSERT_BEFORE(current_job->node, 
+							scheduler.job_scheduler.ml.foreground);
+
+				TRACE("Swap %d out at %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+
+				/* Pop next job from queue and update its service in time. */
+				current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.ml.foreground);
+				if(current_job!=NULL)
+				{
+					REMOVE_FROM_LIST(current_job->node);
+					ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+					if(ts==NULL)
+					{
+						ERROR("Error allocating memory for preserving state of job.\n");
+						exit(0);
+					}
+					ts->ts = scheduler.clock_scheduler.ticks;
+					INIT_CLL_NODE(ts->node, ts);
+					INSERT_BEFORE(ts->node, current_job->ts_root);
+					if(current_job->start_time==-1)
+					{
+						/* Scheduled for the first time */
+						current_job->start_time = scheduler.clock_scheduler.ticks;
+						current_job->run_time = 0;
+					}
+					TRACE("Swap %d in\n", current_job->pid);
+				}
+			}
+			/* Update next switch time to either current_time+slice. This happens irrespective of whether the job was 
+			 swapped out or not. */
+			scheduler.job_scheduler.ml.comn.next_switch = 
+								scheduler.clock_scheduler.ticks + 
+								scheduler.job_scheduler.ml.comn.time_slice;
+
+		}
+		/* Or it is a background task, but a new foreground task has arrived */
+		else if(!current_job->is_foreground && NEXT_IN_LIST(scheduler.job_scheduler.ml.foreground)!=NULL)
+		{
+			/* Preempt the background task and let the foreground task run */
+			INSERT_AFTER(current_job->node, scheduler.job_scheduler.ml.background);
+			/* Pop next job from queue and update its service in time. */
+			current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.ml.foreground);
+
+			REMOVE_FROM_LIST(current_job->node);
+			ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+			if(ts==NULL)
+			{
+				ERROR("Error allocating memory for preserving state of job.\n");
+				exit(0);
+			}
+			ts->ts = scheduler.clock_scheduler.ticks;
+			INIT_CLL_NODE(ts->node, ts);
+			INSERT_BEFORE(ts->node, current_job->ts_root);
+			if(current_job->start_time==-1)
+			{
+				/* Scheduled for the first time */
+				current_job->start_time = scheduler.clock_scheduler.ticks;
+				current_job->run_time = 0;
+			}
+			TRACE("Schedule %d \n", current_job->pid);
+			/* Update next switch time to either current_time+slice*/
+			scheduler.job_scheduler.ml.comn.next_switch = 
+									scheduler.clock_scheduler.ticks + 
+									scheduler.job_scheduler.ml.comn.time_slice;
+		}
+		else
+		{
+			/* It was a foreground job and it has neither finished nor exceeded its time quanta */
+			/* Or, it was a background task and is still executing. */
+		}	
+	}
+
+	/* By now, either current job is still executing, or has been swapped out or has finished executing */
+	scheduler.job_scheduler.ml.comn.job_in_service = current_job;
+	if(scheduler.job_scheduler.ml.comn.job_in_service != NULL)
+	{
+		//TRACE("Process %d running at instant %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+	}
+
+	return;
 }
 void feed_cfs(CLL *incoming_job_queue)
 {
