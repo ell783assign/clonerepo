@@ -45,7 +45,7 @@ void print_output_stat(int num_jobs, JOB *job_completed)
         /* As long as jobs remain to be called */
         if(iteration_global <= num_jobs_global)
         {
-            turnaround_time = job->finish_time - job->start_time;
+            turnaround_time = job->finish_time - job->arrival_time;
             waiting_time = turnaround_time - job->burst_time;
             p.sum_waiting_time += waiting_time;
             p.sum_turnaround_time += turnaround_time;

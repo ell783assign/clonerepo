@@ -222,12 +222,12 @@ void reset_dispatcher()
 	free(job_line);
 	job_line = NULL;
 
-	TRACE("%5s |%10s |%10s |%10s |%10s |\n","PID", "Arrival", "Burst", "Priority", "FG[0/1]");
+	CONSOLE("%5s |%10s |%10s |%10s |%10s |\n","PID", "Arrival", "Burst", "Priority", "FG[0/1]");
 	for(job = (JOB *)NEXT_IN_LIST(dispatcher.job_list_root);
 		job != NULL;
 		job = (JOB *)NEXT_IN_LIST(job->node))
 	{
-		TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
+		CONSOLE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
 					job->burst_time, job->priority, job->is_foreground);
 	}
 

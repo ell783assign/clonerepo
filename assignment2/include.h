@@ -26,6 +26,7 @@
 #define EXIT()
 #endif
 
+#define CONSOLE(...) 	fprintf(stderr,__VA_ARGS__)
 #define TRUE  		(uint32_t)1
 #define FALSE 		(uint32_t)0
 
