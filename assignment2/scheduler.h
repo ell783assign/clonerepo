@@ -186,14 +186,14 @@ typedef struct _scheduler
 	CLOCK_SCHEDULER clock_scheduler;
 	JOB_SCHEDULER job_scheduler;
 }SCHEDULER;
-
-
-#ifdef INCLUDE_GLOBALS
-struct textual_names 
+struct textual_names
 {
 	uint32_t index;
 	char name[50];
-} menu[__MAX_SCHEDULER_COUNT__] = 
+};
+
+#ifdef INCLUDE_GLOBALS
+struct textual_names menu[__MAX_SCHEDULER_COUNT__] = 
 {
 	{0, "First Come First Served Scheduler"},
 	{1, "Shortest Job First Scheduler (Non-Preemptive)"},
