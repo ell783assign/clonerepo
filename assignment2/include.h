@@ -7,6 +7,8 @@
 #include <string.h>
 #include <stddef.h>
 
+#include <trees.h>
+
 #define TRUE  		(uint32_t)1
 #define FALSE 		(uint32_t)0
 

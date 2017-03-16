@@ -58,7 +58,7 @@ typedef struct job
 	uint32_t arrival_time;
 	uint32_t burst_time;
 	uint32_t priority;
-	uint32_t is_background;
+	uint32_t is_foreground;
 
 	int32_t start_time;
 	int32_t run_time;
@@ -147,6 +147,8 @@ typedef struct prio
 typedef struct multilevel
 {
 	JOB_SCHEDULER_COMN comn;
+	CLL foreground;
+	CLL background;
 }ML_SCHED;
 
 typedef struct multilevel_feedback
