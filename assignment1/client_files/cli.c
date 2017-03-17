@@ -77,6 +77,7 @@ int processthiscmd(char *userinput)
 EXIT_LABEL:
 	return (wordsfoundintext);	
 }
+
 #if 0
 int processthiscmd(char *userinput)
 {	

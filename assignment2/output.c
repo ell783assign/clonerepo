@@ -55,7 +55,14 @@ void print_output_stat(int num_jobs, JOB *job_completed)
         if(iteration_global==num_jobs_global)
         {
             printf("\n*****************************************************************\n");
-            printf("\n\nAverage waiting time: %.5f\nAverage turnaround time: %.5f\n\n", 1.0*p.sum_waiting_time/num_jobs_global, 1.0*p.sum_turnaround_time/num_jobs_global);
+            //printf("\n\nAverage waiting time: %.5f\nAverage turnaround time: %.5f\n\n", 1.0*p.sum_waiting_time/num_jobs_global, 1.0*p.sum_turnaround_time/num_jobs_global);
+            printf("\n\nWaiting time: \t Average: %.5f \tVariance: %.5f\n"
+                    "Running time: \t Average: %.5f \tVariance: %.5f\n"
+                    "Turnaround time: \t Average: %.5f \tVariance: %.5f\n\n", 
+                        waiting_stats.first_moment, waiting_stats.variance,
+                        running_stats.first_moment, running_stats.variance,
+                        turnaround_stats.first_moment, turnaround_stats.variance);
+
         }
         return;
     }

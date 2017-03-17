@@ -214,6 +214,8 @@ void reset_dispatcher()
 		job->start_time = -1;
 		job->run_time = 0;
 		job->remaining_time = job->burst_time;
+
+		job->vruntime = 0;
 		INIT_CLL_ROOT(job->ts_root);
 
 		INSERT_BEFORE(job->node, dispatcher.job_list_root);
@@ -248,6 +250,10 @@ void reset_sink()
 	init_time_global = 0;
 	iteration_global = 0;
 	num_jobs_global = 0;
+
+	memset(&waiting_stats, 0, sizeof(waiting_stats));
+	memset(&running_stats, 0, sizeof(running_stats));
+	memset(&turnaround_stats, 0, sizeof(turnaround_stats));
 }
 
 int32_t init_scheduler()
@@ -306,6 +312,8 @@ int32_t init_scheduler()
 
 	init_scheduler_comn(CFS, slice, feed_cfs, (JOB_SCHEDULER_COMN *)&scheduler.job_scheduler.cfs);
 	BST_TREE_INIT(scheduler.job_scheduler.cfs.tree, compare_int, offsetof(JOB, vruntime));
+	scheduler.job_scheduler.cfs.current_load = 0;
+	scheduler.job_scheduler.cfs.min_prio = 0; /* Absurd value for init */
 		
 	return 0;
 }

@@ -165,6 +165,8 @@ typedef struct cfs
 {
 	JOB_SCHEDULER_COMN comn;
 	BST tree;
+	int32_t current_load;
+	int32_t min_prio;
 }CFS_SCHED;
 
 typedef struct _job_scheduler
@@ -210,7 +212,7 @@ SCHEDULER scheduler;
 #else
 extern struct textual_names menu[__MAX_SCHEDULER_COUNT__];
 extern DISPATCH dispatcher;
-extern SCHEDULER scheduler;;
+extern SCHEDULER scheduler;
 #endif
 
 void feed_fcfs(CLL *);

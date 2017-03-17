@@ -1,23 +1,78 @@
 #include <include.h>
 
-static inline void job_completed(JOB *current_job)
+static inline void job_completed(JOB *job)
 {
 	TIMESTAMP *ts = NULL;
-	current_job->finish_time = scheduler.clock_scheduler.ticks;
-	TRACE("Job %d finished at %d\n", current_job->pid, current_job->finish_time);
+	job->finish_time = scheduler.clock_scheduler.ticks;
+	TRACE("Job %d finished at %d\n", job->pid, job->finish_time);
 	/* Remove its time stamps */
-	ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+	ts = (TIMESTAMP *)NEXT_IN_LIST(job->ts_root);
 	while(ts != NULL)
 	{
 		//TRACE("Scheduled at %d\n", ts->ts);
 		REMOVE_FROM_LIST(ts->node);
 		free(ts);
-		ts = (TIMESTAMP *)NEXT_IN_LIST(current_job->ts_root);
+		ts = (TIMESTAMP *)NEXT_IN_LIST(job->ts_root);
 	}			
-	message_sink(current_job->pid, current_job->finish_time, TRUE);
-	print_output_stat(0, current_job);
+	message_sink(job->pid, job->finish_time, TRUE);
 
-	free(current_job);
+	/* Update Average wait time and second moment */
+	waiting_stats.variance = (((waiting_stats.n/(waiting_stats.n +1))*waiting_stats.second_moment) +
+								(((job->finish_time - job->arrival_time - job->burst_time)*
+										(job->finish_time - job->arrival_time - job->burst_time))/(waiting_stats.n +1)))
+							- ((((waiting_stats.n/(waiting_stats.n +1))*waiting_stats.first_moment) +
+								(((job->finish_time - job->arrival_time - job->burst_time))/(waiting_stats.n +1)))
+								*(((waiting_stats.n/(waiting_stats.n +1))*waiting_stats.first_moment) +
+								(((job->finish_time - job->arrival_time - job->burst_time))/(waiting_stats.n +1))));
+	waiting_stats.first_moment = ((waiting_stats.n/(waiting_stats.n +1))*waiting_stats.first_moment)
+									+ ((job->finish_time - job->arrival_time - job->burst_time)/(waiting_stats.n +1));
+
+	waiting_stats.second_moment =  ((waiting_stats.n/(waiting_stats.n +1))*waiting_stats.second_moment)
+									+ (((job->finish_time - job->arrival_time - job->burst_time)*
+										(job->finish_time - job->arrival_time - job->burst_time))/(waiting_stats.n +1));
+	waiting_stats.n +=1;
+
+	/* Update Average turnaround time and second moment */
+	turnaround_stats.variance = (((turnaround_stats.n/(turnaround_stats.n +1))*turnaround_stats.second_moment) +
+							(((job->finish_time - job->arrival_time)*
+									(job->finish_time - job->arrival_time))/(turnaround_stats.n +1)))
+						- ((((turnaround_stats.n/(turnaround_stats.n +1))*turnaround_stats.first_moment) +
+							(((job->finish_time - job->arrival_time ))/(turnaround_stats.n +1)))
+							*(((turnaround_stats.n/(turnaround_stats.n +1))*turnaround_stats.first_moment) +
+							(((job->finish_time - job->arrival_time ))/(turnaround_stats.n +1))));
+	turnaround_stats.first_moment = ((turnaround_stats.n/(turnaround_stats.n +1))*turnaround_stats.first_moment)
+									+ ((job->finish_time - job->arrival_time)/(turnaround_stats.n +1));
+
+	turnaround_stats.second_moment =  ((turnaround_stats.n/(turnaround_stats.n +1))*turnaround_stats.second_moment)
+									+ (((job->finish_time - job->arrival_time)*
+										(job->finish_time - job->arrival_time))/(turnaround_stats.n +1));
+	turnaround_stats.n +=1;
+
+	/* Update Average running time and second moment */
+	running_stats.variance = (((running_stats.n/(running_stats.n +1))*running_stats.second_moment) +
+							(((job->burst_time)*
+									(job->burst_time))/(running_stats.n +1)))
+						- ((((running_stats.n/(running_stats.n +1))*running_stats.first_moment) +
+							(((job->burst_time ))/(running_stats.n +1)))
+							*(((running_stats.n/(running_stats.n +1))*running_stats.first_moment) +
+							(((job->burst_time ))/(running_stats.n +1))));	
+	running_stats.first_moment = ((running_stats.n/(running_stats.n +1))*running_stats.first_moment)
+									+ ((job->burst_time)/(running_stats.n +1));
+
+	running_stats.second_moment =  ((running_stats.n/(running_stats.n +1))*running_stats.second_moment)
+									+ (((job->burst_time)*
+										(job->burst_time))/(running_stats.n +1));
+	running_stats.n +=1;
+
+	TRACE("Waiting time updated: %f\n Running Time updated: %f\n Turnaround time updated: %f\n",
+			waiting_stats.first_moment,
+			running_stats.first_moment,
+			turnaround_stats.first_moment);
+
+
+	print_output_stat(0, job);
+
+	free(job);
 }
 
 static void job_scheduled(JOB *current_job)
@@ -1082,7 +1137,162 @@ void feed_mfq(CLL *incoming_job_queue)
 
 	return;
 }
+
+
 void feed_cfs(CLL *incoming_job_queue)
 {
+	JOB *job=NULL;
+	JOB *current_job = NULL;
 
+	TIMESTAMP *ts = NULL;
+
+	/* All jobs initially have a vruntime of 0. So */
+	if((*incoming_job_queue).next != (*incoming_job_queue).self)
+	{
+		for(job = (JOB *)NEXT_IN_LIST(*incoming_job_queue);
+			job != NULL;
+			job = (JOB *)NEXT_IN_LIST(*incoming_job_queue))
+		{
+			REMOVE_FROM_LIST(job->node);
+			INSERT_BEFORE(job->node, scheduler.job_scheduler.cfs.comn.pending_jobs_queue);
+			TRACE("%5d |%10d |%10d |%10d |%10d |\n",job->pid, job->arrival_time, 
+						job->burst_time, job->priority, job->is_foreground);
+			scheduler.job_scheduler.cfs.current_load +=1;
+			if(scheduler.job_scheduler.cfs.min_prio==0)
+			{
+				scheduler.job_scheduler.cfs.min_prio = job->priority;	
+			}
+			else
+			{
+				scheduler.job_scheduler.cfs.min_prio = (job->priority<scheduler.job_scheduler.cfs.min_prio)?
+															job->priority:scheduler.job_scheduler.cfs.min_prio;	
+			}
+		}
+	}
+
+	/* Is there a job finishing in this time instant? */
+	current_job = scheduler.job_scheduler.cfs.comn.job_in_service;
+	if(current_job==NULL)
+	{
+		/* IDLE CPU. Find next job if available */
+		/* Pop next job from queue and update its service in time. */
+		current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.cfs.comn.pending_jobs_queue);
+		if(current_job!=NULL)
+		{
+			REMOVE_FROM_LIST(current_job->node);
+			ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+			if(ts==NULL)
+			{
+				ERROR("Error allocating memory for preserving state of job.\n");
+				exit(0);
+			}
+			ts->ts = scheduler.clock_scheduler.ticks;
+			INIT_CLL_NODE(ts->node, ts);
+			INSERT_BEFORE(ts->node, current_job->ts_root);
+			current_job->start_time = scheduler.clock_scheduler.ticks;
+			current_job->run_time = 0;
+
+			job_scheduled(current_job);
+
+			/* Update next switch time to either current_time+slice*/
+			scheduler.job_scheduler.cfs.comn.next_switch = 
+									scheduler.clock_scheduler.ticks + 
+									scheduler.job_scheduler.cfs.comn.time_slice;
+		}
+	}
+	else
+	{
+		current_job->run_time++;
+		/* Has the current job finished executing? */
+		if(current_job->run_time==current_job->burst_time)
+		{
+			/* Pass it to sink module */
+			job_completed(current_job);
+			scheduler.job_scheduler.cfs.current_load--;
+
+			/* Schedule next job.*/
+			/* Pop next job from queue and update its service in time. */
+			current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.cfs.comn.pending_jobs_queue);
+			if(current_job!=NULL)
+			{
+				REMOVE_FROM_LIST(current_job->node);
+				ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+				if(ts==NULL)
+				{
+					ERROR("Error allocating memory for preserving state of job.\n");
+					exit(0);
+				}
+				ts->ts = scheduler.clock_scheduler.ticks;
+				INIT_CLL_NODE(ts->node, ts);
+				INSERT_BEFORE(ts->node, current_job->ts_root);
+				if(current_job->start_time==-1)
+				{
+					/* Scheduled for the first time */
+					current_job->start_time = scheduler.clock_scheduler.ticks;
+					current_job->run_time = 0;
+				}
+				TRACE("Schedule %d \n", current_job->pid);
+				job_scheduled(current_job);
+
+				/* Update next switch time to either current_time+slice*/
+				scheduler.job_scheduler.cfs.comn.next_switch = 
+										scheduler.clock_scheduler.ticks + 
+										scheduler.job_scheduler.cfs.comn.time_slice;
+			}
+		}
+		/* Else, have we exceeded out time slice? */
+		else if(scheduler.job_scheduler.cfs.comn.next_switch 
+										== scheduler.clock_scheduler.ticks)
+		{
+			/* TODO */
+			/* Calculate new vruntime and see if it is still less than the head of queue */
+			/* Swap it out. Move it to the end of pending queue if there is another process which is waiting */
+			if(NEXT_IN_LIST(scheduler.job_scheduler.cfs.comn.pending_jobs_queue)!=NULL)
+			{
+				INSERT_BEFORE(current_job->node, 
+							scheduler.job_scheduler.cfs.comn.pending_jobs_queue);
+
+				TRACE("Swap %d out at %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+				job_preempted(current_job);
+
+				/* Pop next job from queue and update its service in time. */
+				current_job = (JOB *)NEXT_IN_LIST(scheduler.job_scheduler.cfs.comn.pending_jobs_queue);
+				if(current_job!=NULL)
+				{
+					REMOVE_FROM_LIST(current_job->node);
+					ts = (TIMESTAMP *)malloc(sizeof(TIMESTAMP));
+					if(ts==NULL)
+					{
+						ERROR("Error allocating memory for preserving state of job.\n");
+						exit(0);
+					}
+					ts->ts = scheduler.clock_scheduler.ticks;
+					INIT_CLL_NODE(ts->node, ts);
+					INSERT_BEFORE(ts->node, current_job->ts_root);
+					if(current_job->start_time==-1)
+					{
+						/* Scheduled for the first time */
+						current_job->start_time = scheduler.clock_scheduler.ticks;
+						current_job->run_time = 0;
+					}
+					TRACE("Swap %d in\n", current_job->pid);
+					job_scheduled(current_job);
+				}
+				/* Update next switch time to either current_time+slice*/
+				scheduler.job_scheduler.cfs.comn.next_switch = 
+									scheduler.clock_scheduler.ticks + 
+									scheduler.job_scheduler.cfs.comn.time_slice;
+			}
+		}
+		/* Else continue doing what we were doing. */
+	}
+
+	/* By now, either current job is still executing, or has been swapped out or has finished executing */
+	scheduler.job_scheduler.cfs.comn.job_in_service = current_job;
+	if(scheduler.job_scheduler.cfs.comn.job_in_service != NULL)
+	{
+		//TRACE("Process %d running at instant %d\n", current_job->pid, scheduler.clock_scheduler.ticks);
+	}
+
+	return;
 }

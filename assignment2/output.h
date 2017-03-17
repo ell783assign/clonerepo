@@ -50,6 +50,13 @@ typedef struct
     int sum_turnaround_time;
 }Process;
 
+typedef struct stats
+{
+	float n;
+	float first_moment;
+	float second_moment;
+	float variance;
+}STATS;
 
 #ifdef INCLUDE_GLOBALS
 
@@ -57,7 +64,13 @@ int times_called_global = 0;
 int init_time_global = 0;
 int iteration_global = 0;
 int num_jobs_global = 0;
+
+
 Process p;
+
+STATS waiting_stats = {0};
+STATS turnaround_stats = {0};
+STATS running_stats = {0};
 
 #else
 
@@ -66,7 +79,9 @@ extern int init_time_global;
 extern int iteration_global;
 extern int num_jobs_global;
 extern Process p;
-
+extern STATS waiting_stats;
+extern STATS turnaround_stats;
+extern STATS running_stats;
 #endif
 
 #endif
