@@ -92,8 +92,7 @@ struct glob
 	/* Global job queue */
 	CLL queue;
 
-	/* Counting semaphore */
-	sem_t queue_lock;
+	sem_t wakeup;
 
 	/* Queue capacity */
 	int32_t capacity;
@@ -120,6 +119,8 @@ typedef struct thread_context
 {
 	pthread_t tid;
 	int32_t thread_number;
+
+	int32_t idle;
 
 }THREAD_CONTEXT;
 
@@ -303,7 +304,7 @@ int32_t main(int32_t argc, char *argv[])
 	GLOBAL.capacity = QUEUE_CAPACITY;
 	GLOBAL.occupancy = 0;
 	GLOBAL.jobs_in_service = 0;
-	sem_init(&GLOBAL.queue_lock, 0, GLOBAL.capacity);
+	sem_init(&GLOBAL.wakeup, 0, 0);
 
 	GLOBAL.ticks = 0;
 	GLOBAL.num_jobs = -1;
@@ -311,7 +312,8 @@ int32_t main(int32_t argc, char *argv[])
 	for(ii=0;ii<NUM_COUNTERS;ii++)
 	{
 		consumers[ii].thread_number = ii;
-		
+		//sem_init(&consumers[ii].wakeup, 0, 0);
+		consumers[ii].idle = TRUE;
 		/* Start other threads */
 
 		ret_val = pthread_create(&consumers[ii].tid, NULL, &consume, &consumers[ii].thread_number);
@@ -348,6 +350,12 @@ int32_t main(int32_t argc, char *argv[])
 				REMOVE_FROM_LIST(job->node);
 				if(GLOBAL.occupancy< GLOBAL.capacity)
 				{
+					if(GLOBAL.occupancy<NUM_COUNTERS)
+					{
+						TRACE("Wakeup counter.");
+						sem_post(&GLOBAL.wakeup);
+					}
+
 					TRACE("[%d]Insert job %d. Occupancy=%d", 
 													job->arrival_time, 
 													job->pid, 
@@ -377,11 +385,16 @@ void * consume(void *args)
 {
 	int32_t thread_number = *(int32_t *)args;
 	JOB *job = NULL;
+	int32_t block = TRUE;
 
 	TRACE("Created thread %d", thread_number);
 
 	while(1)
 	{
+		if(block==TRUE)
+		{
+			sem_wait(&GLOBAL.wakeup);
+		}
 		/* Get lock on mutex to access job queue */
 		pthread_mutex_lock(&GLOBAL.mutex);
 		if(GLOBAL.occupancy>0)
@@ -411,9 +424,22 @@ void * consume(void *args)
 				REMOVE_FROM_LIST(job->node);
 				GLOBAL.occupancy -=1;
 				GLOBAL.jobs_in_service -= 1;
+				if(GLOBAL.occupancy>=NUM_COUNTERS)
+				{
+					block = FALSE;
+				}
+				else
+				{
+					block = TRUE;
+				}
+				TRACE("Counter %d finishes %d", thread_number, job->pid);
 				free(job);
 				job = NULL;
 			}
+		}
+		else if(GLOBAL.occupancy<NUM_COUNTERS)
+		{
+			block = TRUE;
 		}
 		pthread_mutex_unlock(&GLOBAL.mutex);
 		/* Else wait on some job to arrive! */
