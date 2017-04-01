@@ -44,11 +44,8 @@ Let arrivals be like:
 |Job		|  	Arrival		|   	Service Time	|
 |---------------|-----------------------|-----------------------|
 | 1		|	 0.3		|	2		|
-|---------------|-----------------------|-----------------------|
 | 2		|	 1.5		|	1		|
-|---------------|-----------------------|-----------------------|
 | 3		|        2.3		|	1		|
-|---------------|-----------------------|-----------------------|
 
 Queue capacity: 1
 
@@ -57,12 +54,9 @@ Queue capacity: 1
 |----|---------------------------------------------|---------------------------------------------|
 |t=1 | Check if new jobs arrived in interval (0,1] | Check if there is some job currently running|
 |    | Occupancy=0; Capacity=1; Enqueue Job 1	   | No running job, Dequeue Job 1 and service	 |
-|----|---------------------------------------------|---------------------------------------------|
 |t=2 | Check if new jobs arrived in interval (1,2] | Check if there is some job currently running|
 |    | Occupancy=0; Capacity=1; Enqueue Job 2	   | Job 1 running (till t=1+2)			 |
-|----|---------------------------------------------|---------------------------------------------|
 |t=3 | Check if new jobs arrived in interval (2,3] | Check if there is some job currently running|
 |    | Occupancy=1; Capacity=1; Drop Job 3	   | Job 1 finished. Dequeue Job 2 and service	 |
-|----|---------------------------------------------|---------------------------------------------|
 
 Producer thread looks into the next jobs arrival time and goes to sleep until that period while the consumer thread grabs the head of line job and goes to sleep.
