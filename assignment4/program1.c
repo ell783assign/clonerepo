@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <errno.h>
 
+#define BUF_LEN 1024
+
 /****************************************************************************************/
 /* Custom defines section.															    */
 /****************************************************************************************/
@@ -78,12 +80,22 @@ typedef struct circular_linked_list
 
 /****************************************************************************************/
 
+/****************************************************************************************/
+/* Globals for this program: It's not the best way, but I am just being lazy			*/
+
+char *file_name = NULL;
+char *dir_path = NULL;
+
+char *src_file = NULL;
+char *src_path = NULL;
+/****************************************************************************************/
+
 static void print_usage(const char *bin_name)
 {
 	fprintf(stderr, "\n%s <file_to_copy> <destination>\n", bin_name);
 }
 
-static int32_t check_file_exists(const char *file_name)
+static int32_t check_file_exists(const char *file_name, int32_t return_fd)
 {
 	int32_t fd = -1;
 
@@ -97,7 +109,22 @@ static int32_t check_file_exists(const char *file_name)
 	{
 		TRACE("File exists!");
 	}
-	return(fd);
+	if(return_fd)
+	{	
+		return(fd);
+	}
+	else
+	{
+		close(fd);
+		if(fd>=0)
+		{
+			return(1);
+		}
+		else
+		{
+			return(-1);
+		}
+	}
 }
 
 
@@ -172,9 +199,9 @@ static int32_t check_path_valid(const char *path, int32_t recurse)
 	int32_t size_reqd = 1024;
 	char *cwd = NULL;
 
-	char *dir_path=NULL;
+	extern char *dir_path;
 
-	char *file_name=NULL;
+	extern char *file_name;
 
 retry:
 	cwd = (char *)malloc(sizeof(char) * size_reqd);
@@ -210,7 +237,7 @@ retry:
 		if(errno==ENOENT || errno ==ENOTDIR)
 		{
 			/* Could not cd to it. That implies it is not a valid path. Could be a file, check if file exists */
-			if(check_file_exists(path)>=0)
+			if(check_file_exists(path, FALSE)>=0)
 			{
 				ERROR("File exists! Cannot copy!");
 				ret_val = -1;
@@ -263,12 +290,41 @@ EXIT_LABEL:
 	return(ret_val);	
 }
 
+static int32_t do_copy(int32_t source, int32_t destination)
+{
+	int32_t ret_val = 0;
+	TRACE("Copy!");
+
+	char buf[BUF_LEN] = {0};
+	int32_t bytes_read = 0;
+	int32_t bytes_written = 0;
+
+	while((bytes_read = read(source, buf, sizeof(buf)))>0)
+	{
+		while(bytes_written >= 0 && bytes_written < bytes_read)
+		{
+			bytes_written = write(destination, buf, bytes_read);
+		}
+		if(bytes_written != bytes_read)
+		{
+			ERROR("Error occured while copying!");
+			perror("Reason");
+			ret_val = -1;
+			break;
+		}
+	}
+	return(ret_val);
+}
+
 int32_t main(int32_t argc, char *argv[])
 {
 	int32_t ret_val= 0;
 
 	int32_t fd = -1;
 
+	int32_t dest_fd = -1;
+
+	char *dest_path = NULL;
 	/* 
 	 * Input sanity check: There must be exactly 2 extra parameters provided
 	 * 
@@ -287,7 +343,7 @@ int32_t main(int32_t argc, char *argv[])
 	 }
 
 	 /* Check if file to copy is valid or not. */
-	 fd = check_file_exists(argv[1]);
+	 fd = check_file_exists(argv[1], TRUE);
 	 if(fd==-1)
 	 {
 	 	/* We've already printed the error message */
@@ -299,7 +355,49 @@ int32_t main(int32_t argc, char *argv[])
 	 if(ret_val == -1)
 	 {
 	 	ERROR("Not a valid path!");
+	 	goto EXIT_LABEL;
 	 }
+
+	ret_val = strip_file_name(argv[1], &src_path, &src_file);
+	if(ret_val==-1)
+	{
+		ERROR("Error occured while stripping file from path.");
+		ret_val = -1;
+	 	goto EXIT_LABEL;
+	}
+	 /* OK. Now, open file in destination */
+	 if(file_name==NULL)
+ 	 { 
+ 		file_name = src_file;	
+ 	 }
+
+	 if(dir_path!=NULL)
+	 {
+	 	dest_path = (char *)malloc(sizeof(char)* (strlen(dir_path) + strlen(file_name)+1));
+	 	snprintf(dest_path, (strlen(dir_path) + strlen(file_name)+2), "%s/%s", dir_path, file_name);	
+	 }
+	 else
+	 {
+	 	dest_path = (char *)malloc(sizeof(char)* (strlen(file_name)+1));
+	 	snprintf(dest_path, (strlen(file_name)+1), "%s",file_name);	
+	 }
+	 
+	 dest_fd = open(dest_path, O_WRONLY|O_CREAT);
+	 if(dest_fd<0)
+	 {
+	 	ERROR("Error opening descriptor for new file!");
+	 	ret_val = -1;
+	 	perror("Reason");
+	 	goto EXIT_LABEL;
+	 }
+
+	 TRACE("Source File Path: %s", (src_path==NULL?"NONE": src_path));
+	 TRACE("Source File Name: %s", (src_file==NULL?"NONE": src_file));
+	 TRACE("Destination File Path: %s", (dir_path==NULL?"NONE": dir_path));
+	 TRACE("Destination File Name: %s", (file_name==NULL?"NONE": file_name));
+
+	 TRACE("Full path: %s", dest_path);
+	 ret_val = do_copy(fd, dest_fd);
 
 EXIT_LABEL:
 	return(ret_val);
