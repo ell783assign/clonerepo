@@ -12,6 +12,7 @@
 #include <errno.h>
 
 #define BUF_LEN 1024
+#define MAX_BUF_LEN  (BUF_LEN * 1024 * 10)		//10MB Max buffer size
 
 /****************************************************************************************/
 /* Custom defines section.															    */
@@ -296,15 +297,32 @@ static int32_t do_copy(int32_t source, int32_t destination)
 	int32_t ret_val = 0;
 	TRACE("Copy!");
 
-	char buf[BUF_LEN] = {0};
+	char *buf;
 	int32_t bytes_read = 0;
 	int32_t bytes_written = 0;
 
-	while((bytes_read = read(source, buf, sizeof(buf)))>0)
+	int32_t buf_len = BUF_LEN;
+
+	static float print_progress = 0;
+
+	buf = (char *)malloc(sizeof(char) * buf_len);
+	if(buf==NULL)
+	{
+		ERROR("Error allocating memory for copy operation.");
+		ret_val = -1;
+		goto EXIT_LABEL;
+	}
+
+	fprintf(stdout, "\n");
+	while((bytes_read = read(source, buf, buf_len))>0)
 	{
 		do
 		{
 			bytes_written = write(destination, buf, bytes_read);
+
+			print_progress += bytes_written;
+			fprintf(stdout, "\rCopied %fkB", print_progress/1024);
+
 		}while(bytes_written >= 0 && bytes_written < bytes_read);
 
 		if(bytes_written != bytes_read)
@@ -314,7 +332,20 @@ static int32_t do_copy(int32_t source, int32_t destination)
 			ret_val = -1;
 			break;
 		}
+		/* Double buffer (prospectively) for faster copy */
+		buf_len += buf_len;
+
+		buf_len = buf_len >= MAX_BUF_LEN? MAX_BUF_LEN: buf_len;
+
+		buf = (char *)realloc(buf, sizeof(char) * buf_len);
+		if(buf==NULL)
+		{
+			ERROR("Error allocating memory for copy operation.");
+			ret_val = -1;
+			break;
+		}		
 	}
+EXIT_LABEL:	
 	return(ret_val);
 }
 
@@ -476,13 +507,20 @@ int32_t main(int32_t argc, char *argv[])
 
 	 TRACE("Full path: %s", dest_path);
 	 ret_val = do_copy(fd, dest_fd);
-
-	 close(dest_fd);
-	 dest_fd = -1;
+	 if(ret_val == -1)
+	 {
+	 	ERROR("Copy failed!");
+	 	goto ERROR_COND;
+	 }
 
 	 /* Delete old file */
-	 close(fd);
 	 unlink(argv[1]);
+ERROR_COND:	 
+	 close(fd);
+ 	 close(dest_fd);
+	 dest_fd = -1;
+
+
 EXIT_LABEL:
 	return(ret_val);
 }
