@@ -278,6 +278,7 @@ retry:
 	{
 		/* Is a valid path. Just switch back to original one */
 		TRACE("%s is a valid path!", path);
+		dir_path = (char *)path;
 		ret_val = chdir(cwd);
 		if(ret_val!=0)
 		{
@@ -301,10 +302,11 @@ static int32_t do_copy(int32_t source, int32_t destination)
 
 	while((bytes_read = read(source, buf, sizeof(buf)))>0)
 	{
-		while(bytes_written >= 0 && bytes_written < bytes_read)
+		do
 		{
 			bytes_written = write(destination, buf, bytes_read);
-		}
+		}while(bytes_written >= 0 && bytes_written < bytes_read);
+
 		if(bytes_written != bytes_read)
 		{
 			ERROR("Error occured while copying!");
@@ -325,6 +327,9 @@ int32_t main(int32_t argc, char *argv[])
 	int32_t dest_fd = -1;
 
 	char *dest_path = NULL;
+
+	unsigned int file_perms = 0;
+	struct stat file_stats;
 	/* 
 	 * Input sanity check: There must be exactly 2 extra parameters provided
 	 * 
@@ -365,6 +370,78 @@ int32_t main(int32_t argc, char *argv[])
 		ret_val = -1;
 	 	goto EXIT_LABEL;
 	}
+
+	/* Get soruce file permissions */
+	/*
+		S_IRWXU
+		00700 user (file owner) has read, write and execute permission
+		S_IRUSR
+		00400 user has read permission
+		S_IWUSR
+		00200 user has write permission
+		S_IXUSR
+		00100 user has execute permission
+		S_IRWXG
+		00070 group has read, write and execute permission
+		S_IRGRP
+		00040 group has read permission
+		S_IWGRP
+		00020 group has write permission
+		S_IXGRP
+		00010 group has execute permission
+		S_IRWXO
+		00007 others have read, write and execute permission
+		S_IROTH
+		00004 others have read permission
+		S_IWOTH
+		00002 others have write permission
+		S_IXOTH
+	*/
+	ret_val = stat(argv[1], &file_stats);
+	if(ret_val == -1)
+	{
+		ERROR("Stat failed.");
+		perror("Reason");
+		goto EXIT_LABEL;
+	}
+
+	if(file_stats.st_mode & S_IRUSR)
+	{
+		file_perms |= S_IRUSR;
+	}
+	if(file_stats.st_mode & S_IWUSR)
+	{
+		file_perms |= S_IWUSR;
+	}
+	if(file_stats.st_mode & S_IXUSR)
+	{
+		file_perms |= S_IXUSR;
+	}
+	if(file_stats.st_mode & S_IRGRP)
+	{
+		file_perms |= S_IRGRP;
+	}
+	if(file_stats.st_mode & S_IWGRP)
+	{
+		file_perms |= S_IWGRP;
+	}
+	if(file_stats.st_mode & S_IXGRP)
+	{
+		file_perms |= S_IXGRP;
+	}
+	if(file_stats.st_mode & S_IROTH)
+	{
+		file_perms |= S_IROTH;
+	}
+	if(file_stats.st_mode & S_IWOTH)
+	{
+		file_perms |= S_IWOTH;
+	}
+	if(file_stats.st_mode & S_IXOTH)
+	{
+		file_perms |= S_IXOTH;
+	}
+
 	 /* OK. Now, open file in destination */
 	 if(file_name==NULL)
  	 { 
@@ -382,7 +459,13 @@ int32_t main(int32_t argc, char *argv[])
 	 	snprintf(dest_path, (strlen(file_name)+1), "%s",file_name);	
 	 }
 	 
-	 dest_fd = open(dest_path, O_WRONLY|O_CREAT);
+
+	 TRACE("Source File Path: %s", (src_path==NULL?"NONE": src_path));
+	 TRACE("Source File Name: %s", (src_file==NULL?"NONE": src_file));
+	 TRACE("Destination File Path: %s", (dir_path==NULL?"NONE": dir_path));
+	 TRACE("Destination File Name: %s", (file_name==NULL?"NONE": file_name));
+
+	 dest_fd = open(dest_path, O_WRONLY|O_CREAT| file_perms);
 	 if(dest_fd<0)
 	 {
 	 	ERROR("Error opening descriptor for new file!");
@@ -391,14 +474,15 @@ int32_t main(int32_t argc, char *argv[])
 	 	goto EXIT_LABEL;
 	 }
 
-	 TRACE("Source File Path: %s", (src_path==NULL?"NONE": src_path));
-	 TRACE("Source File Name: %s", (src_file==NULL?"NONE": src_file));
-	 TRACE("Destination File Path: %s", (dir_path==NULL?"NONE": dir_path));
-	 TRACE("Destination File Name: %s", (file_name==NULL?"NONE": file_name));
-
 	 TRACE("Full path: %s", dest_path);
 	 ret_val = do_copy(fd, dest_fd);
 
+	 close(dest_fd);
+	 dest_fd = -1;
+
+	 /* Delete old file */
+	 close(fd);
+	 unlink(argv[1]);
 EXIT_LABEL:
 	return(ret_val);
 }
