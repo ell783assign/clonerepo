@@ -8,15 +8,19 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#include <math.h>
+
 #define NUM_COUNTERS 2
 #define QUEUE_CAPACITY 2
+#define LAMBDA  1
+#define MU 		1
 /****************************************************************************************/
 /* Custom defines section.															    */
 /****************************************************************************************/
 #ifdef BUILD_DEBUG
-#define TRACE(...) 	fprintf(stderr, "\nTRACE  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
-#define WARN(...) 	fprintf(stderr, "\nWARN  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
-#define ERROR(...)  fprintf(stderr, "\nERROR  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define TRACE(...) 	fprintf(stderr, "\e[1;32m\nTRACE  \t%10s\t%3d\e[0m\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define WARN(...) 	fprintf(stderr, "\e[1;33m\nWARN  \t%10s\t%3d\e[0m\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define ERROR(...)  fprintf(stderr, "\e[0;31m\nERROR  \t%10s\t%3d\e[0m\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
 #define ENTRY()		fprintf(stderr, "\nTRACE \t%10s\t%3d Enter {",__func__, __LINE__);
 #define EXIT()		fprintf(stderr, "\nTRACE \t%10s\t%3d Exit }",__func__, __LINE__);
 #else
@@ -26,6 +30,13 @@
 #define ENTRY()
 #define EXIT()
 #endif
+
+#define WAKEUP(...) fprintf(stderr, "\e[1;32m\nWAKEUP\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
+#define SLEEP(...) fprintf(stderr, "\e[1;33m\nSLEEP\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
+#define DROP(...) fprintf(stderr, "\e[0;31m\nDROP\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
+#define CONSUME(...) fprintf(stderr, "\e[0;34m\nCONSUME\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
+#define FINISH(...) fprintf(stderr, "\e[0;35m\nFINISHED\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
+#define ARRIVAL(...) fprintf(stderr, "\e[0;36m\nARRIVAL\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
 
 #define CONSOLE(...) 	fprintf(stderr,__VA_ARGS__)
 #define TRUE  		(uint32_t)1
@@ -92,6 +103,9 @@ struct glob
 	/* Global job queue */
 	CLL queue;
 
+	/* Number of counters */
+	uint32_t num_counters;
+
 	sem_t wakeup;
 
 	/* Queue capacity */
@@ -108,11 +122,7 @@ struct glob
 	/* clock */
 	uint32_t ticks;
 
- 	/* Job file pointer */
-	FILE *job_file;
-
 	int32_t num_jobs;
-
 }GLOBAL;
 
 typedef struct thread_context
@@ -128,8 +138,28 @@ typedef struct thread_context
 /*************************************************************************************/
 void * consume(void *);
 int32_t get_next_batch(CLL *);
+static void get_next_job(int32_t *, uint32_t *, uint32_t *, float, float);
 /*************************************************************************************/
 
+static void get_next_job(int32_t *pid, uint32_t *arrival_time, uint32_t *burst_time, float lambda, float mu)
+{
+	static uint32_t prev_arrival_time = 0;
+	static uint32_t next_pid = 0;
+
+	long double random_val_1 = ((long double)rand()/ RAND_MAX);
+	long double random_val_2 = ((long double)rand()/ RAND_MAX);
+
+	/* Generate next arrival time*/
+	*arrival_time = prev_arrival_time + (((-1.0/lambda)*(log(random_val_1)))*1000);
+	prev_arrival_time = *arrival_time;
+
+	/* Generate next burst time*/
+	*burst_time = (((-1.0/mu)*(log(random_val_2)))*1000);
+
+	*pid = ++next_pid;
+
+	return;
+}
 
 
 int32_t get_next_batch(CLL *list)
@@ -148,25 +178,11 @@ int32_t get_next_batch(CLL *list)
 	static JOB *save_for_next=NULL;
 
 	char *job_line = NULL;
-	if(GLOBAL.num_jobs == -1)
-	{
-		if(getline(&job_line, &length, GLOBAL.job_file) <-1)
-		{
-			ERROR("Error reading line from file.");
-			ret_val = -1;
-			goto EXIT_LABEL;
-		}
-		if((params_read=sscanf(job_line, "%d", &GLOBAL.num_jobs))<1)
-		{
-			ERROR("Malformed input file.");
-			ret_val = -1;
-			goto EXIT_LABEL;
-		}
-		TRACE("Number of jobs: %d", GLOBAL.num_jobs);
-	}
+
 	/* Read next job */
+
 	if(jobs_read < GLOBAL.num_jobs)
-	{	
+	{
 		if(save_for_next != NULL)
 		{
 			job = save_for_next;
@@ -174,13 +190,6 @@ int32_t get_next_batch(CLL *list)
 		}
 		else
 		{
-			if(getline(&job_line, &length, GLOBAL.job_file) == -1)
-			{
-				ERROR("Error reading line from file.");
-				ret_val = -1;
-				goto EXIT_LABEL;
-			}
-
 			job = (JOB *)malloc(sizeof(JOB));
 			if(job==NULL)
 			{
@@ -190,14 +199,7 @@ int32_t get_next_batch(CLL *list)
 			}
 			INIT_CLL_NODE(job->node, job);
 			job->owner_cpu = -1;
-			if((params_read = sscanf(job_line, "%d %d %d", &job->pid,
-															&job->arrival_time, 
-														  	&job->burst_time)) < 3)
-			{
-				ERROR("Malformed input line. %d", params_read);
-				ret_val = -1;
-				goto EXIT_LABEL;
-			}
+			get_next_job(&job->pid, &job->arrival_time, &job->burst_time, LAMBDA, MU);
 		}
 		INSERT_BEFORE(job->node, *list);
 		jobs_read++;
@@ -207,13 +209,6 @@ int32_t get_next_batch(CLL *list)
 		/* Check if others job also needs to be enqueued. Else, put it on hold. */
 		while(jobs_read < GLOBAL.num_jobs)
 		{
-			if(getline(&job_line, &length, GLOBAL.job_file) == -1)
-			{
-				ERROR("Error reading line from file.");
-				ret_val = -1;
-				goto EXIT_LABEL;
-			}
-
 			job = (JOB *)malloc(sizeof(JOB));
 			if(job==NULL)
 			{
@@ -223,14 +218,8 @@ int32_t get_next_batch(CLL *list)
 			}
 			INIT_CLL_NODE(job->node, job);
 			job->owner_cpu = -1;
-			if((params_read = sscanf(job_line, "%d %d %d",&job->pid,
-														  &job->arrival_time, 
-														  &job->burst_time)) < 3)
-			{
-				ERROR("Malformed input line. %d", params_read);
-				ret_val = -1;
-				break;
-			}
+			get_next_job(&job->pid, &job->arrival_time, &job->burst_time, LAMBDA, MU);
+
 			if(next_job_arrival_time < job->arrival_time)
 			{
 				save_for_next = job;
@@ -266,30 +255,71 @@ EXIT_LABEL:
 }
 
 
+static void print_help(char *argv[])
+{
+	fprintf(stdout, "%s [-s <num of counters>] [-c <queue capacity>] [-m <max customers>]\n", argv[0]);
+	return;
+}
+
 int32_t main(int32_t argc, char *argv[])
 {
 	int32_t ret_val = 0;
 
 	int32_t ii;
 
-	THREAD_CONTEXT consumers[NUM_COUNTERS];
-
-	GLOBAL.job_file = NULL;
+	THREAD_CONTEXT *consumers;
 
 	CLL feed;
 	JOB *job=NULL;
 
-	if(argc==2)
+	GLOBAL.capacity = QUEUE_CAPACITY;
+	GLOBAL.num_jobs = 10000;
+	GLOBAL.num_counters = NUM_COUNTERS;
+
+	while((ret_val = getopt(argc, argv, "hs:c:m:")) != -1)
 	{
-		GLOBAL.job_file = fopen(argv[1], "r");
+		switch(ret_val)
+		{
+		case 's':
+			GLOBAL.num_counters = atoi(optarg);
+			break;
+
+		case 'c':
+			GLOBAL.capacity = atoi(optarg);
+			break;
+
+		case 'm':
+			GLOBAL.num_jobs = atoi(optarg);
+			break;
+
+		case 'h':
+			print_help(argv);
+			exit(0);
+			break;
+
+		default:
+			ERROR("Improper inputs. Exiting");
+			exit(0);
+		}
 	}
-	else
+
+	if(optind < argc)
 	{
-		GLOBAL.job_file = fopen("jobs.txt", "r");
+		ERROR("Erroneous number of inputs.");
+		exit(0);
 	}
-	if(!GLOBAL.job_file)
+
+	fprintf(stderr, "Number of counters: %d\n", GLOBAL.num_counters);
+	fprintf(stderr,"Line capacity: %d\n", GLOBAL.capacity);
+	fprintf(stderr,"Number of customers: %d\n", GLOBAL.num_jobs);
+
+	ret_val = 0;
+
+	consumers = (THREAD_CONTEXT *)malloc(sizeof(THREAD_CONTEXT) * GLOBAL.num_counters);
+	if(consumers == NULL)
 	{
-		ERROR("Could not open job file");
+		ERROR("Error allocating memory for thread contexts.");
+		ret_val = -1;
 		goto EXIT_LABEL;
 	}
 
@@ -301,15 +331,13 @@ int32_t main(int32_t argc, char *argv[])
 		goto EXIT_LABEL;
 	}
 
-	GLOBAL.capacity = QUEUE_CAPACITY;
 	GLOBAL.occupancy = 0;
 	GLOBAL.jobs_in_service = 0;
 	sem_init(&GLOBAL.wakeup, 0, 0);
 
 	GLOBAL.ticks = 0;
-	GLOBAL.num_jobs = -1;
 
-	for(ii=0;ii<NUM_COUNTERS;ii++)
+	for(ii=0;ii<GLOBAL.num_counters;ii++)
 	{
 		consumers[ii].thread_number = ii;
 		//sem_init(&consumers[ii].wakeup, 0, 0);
@@ -348,6 +376,7 @@ int32_t main(int32_t argc, char *argv[])
 				job = (JOB *)NEXT_IN_LIST(feed))
 			{
 				REMOVE_FROM_LIST(job->node);
+				ARRIVAL("[%d]\tTime: %u\tBurst: %u",job->pid, job->arrival_time, job->burst_time);
 				if(GLOBAL.occupancy< GLOBAL.capacity)
 				{
 					if(GLOBAL.occupancy<NUM_COUNTERS)
@@ -366,6 +395,7 @@ int32_t main(int32_t argc, char *argv[])
 				else
 				{
 					WARN("[%d]Dropping process %d", job->arrival_time, job->pid);
+					DROP("[%d]", job->pid);
 					free(job);
 					job=NULL;
 				}
@@ -378,6 +408,10 @@ int32_t main(int32_t argc, char *argv[])
 
 
 EXIT_LABEL:
+	if(consumers != NULL)
+	{
+		free(consumers);
+	}
 	return(ret_val);
 }
 
@@ -393,7 +427,9 @@ void * consume(void *args)
 	{
 		if(block==TRUE)
 		{
+			SLEEP("Counter %d going to sleep", thread_number);
 			sem_wait(&GLOBAL.wakeup);
+			WAKEUP("Counter %d woken up", thread_number);
 		}
 		/* Get lock on mutex to access job queue */
 		pthread_mutex_lock(&GLOBAL.mutex);
@@ -416,6 +452,7 @@ void * consume(void *args)
 			else if(job!=NULL)
 			{
 				TRACE("Counter %d processes job %d", thread_number, job->pid);
+				CONSUME("[%d]", job->pid);
 				GLOBAL.jobs_in_service +=1 ;
 				job->owner_cpu = thread_number;
 				pthread_mutex_unlock(&GLOBAL.mutex);
@@ -433,6 +470,7 @@ void * consume(void *args)
 					block = TRUE;
 				}
 				TRACE("Counter %d finishes %d", thread_number, job->pid);
+				FINISH("[%d]", job->pid);
 				free(job);
 				job = NULL;
 			}
