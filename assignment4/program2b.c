@@ -134,7 +134,7 @@ int simsh_execute(char **args)
   return simsh_launch(args);
 }
 
-#define simsh_RL_BUFSIZE 1024000
+#define simsh_RL_BUFSIZE 1024
 /**
    @brief Read a input_string of input from stdin.
    @return The input_string from stdin.
