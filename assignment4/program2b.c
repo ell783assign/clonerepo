@@ -8,34 +8,49 @@
   Function Declarations for builtin shell commands:
  */
 int simsh_cd(char **args);
+<<<<<<< HEAD
 int simsh_help(char **args);
 int simsh_exit(char **args);
 int simsh_pushd(char **args);
 int simsh_popd(char **args);
 int simsh_path(char **args);
 int simsh_dirs(char **args);
+=======
+int simsh_info(char **args);
+int simsh_exit(char **args);
+>>>>>>> 0cc8b5ac559b1ed03953c9eaac0368b55da56cdd
 
 /*
   List of builtin commands, followed by their corresponding functions.
  */
 char *builtin_str[] = {
   "cd",
+<<<<<<< HEAD
   "help",
   "exit",
   "pushd",
   "popd",
   "path",
   "dirs"
+=======
+  "info",
+  "exit"
+>>>>>>> 0cc8b5ac559b1ed03953c9eaac0368b55da56cdd
 };
 
 int (*builtin_func[]) (char **) = {
   &simsh_cd,
+<<<<<<< HEAD
   &simsh_help,
   &simsh_exit,
   &simsh_pushd,
   &simsh_popd,
   &simsh_path,
   &simsh_dirs
+=======
+  &simsh_info,
+  &simsh_exit
+>>>>>>> 0cc8b5ac559b1ed03953c9eaac0368b55da56cdd
 };
 
 int simsh_num_builtins() {
@@ -64,11 +79,19 @@ int simsh_cd(char **args)
 }
 
 /**
+<<<<<<< HEAD
    @brief Builtin command: print help.
    @param args List of args.  Not examined.
    @return Always returns 1, to continue executing.
  */
 int simsh_help(char **args)
+=======
+   @brief Builtin command: print info.
+   @param args List of args.  Not examined.
+   @return Always returns 1, to continue executing.
+ */
+int simsh_info(char **args)
+>>>>>>> 0cc8b5ac559b1ed03953c9eaac0368b55da56cdd
 {
   int i;
   printf("Simple shell simulation\n");
@@ -94,6 +117,7 @@ int simsh_exit(char **args)
 }
 
 /**
+<<<<<<< HEAD
  * @brief Builtin command: pushd.
  */
 int simsh_pushd(char **args)
@@ -130,6 +154,13 @@ int simsh_dirs(char **args)
   @return Always returns 1, to continue execution.
  */
 int simsh_runsys(char **args)
+=======
+  @brief Launch a program and wait for it to terminate.
+  @param args Null terminated list of arguments (including program).
+  @return Always returns 1, to continue execution.
+ */
+int simsh_launch(char **args)
+>>>>>>> 0cc8b5ac559b1ed03953c9eaac0368b55da56cdd
 {
   pid_t pid;
   int result;
@@ -154,6 +185,7 @@ int simsh_runsys(char **args)
   return 1;
 }
 
+<<<<<<< HEAD
 /*
  * @brief check whether a command exists in current directory or not
  * @param arg The name of the command to search
@@ -211,6 +243,10 @@ int simsh_runlocal(char **args)
 }
 /**
    @brief Execute shell built-in or runsys program.
+=======
+/**
+   @brief Execute shell built-in or launch program.
+>>>>>>> 0cc8b5ac559b1ed03953c9eaac0368b55da56cdd
    @param args Null terminated list of arguments.
    @return 1 if the shell should continue running, 0 if it should terminate
  */
@@ -228,12 +264,17 @@ int simsh_execute(char **args)
       return (*builtin_func[i])(args);
     }
   }
+<<<<<<< HEAD
   
   if(simsh_islocal(args[0])!=0)
   {
   	return simsh_runlocal(args);
   }
   return simsh_runsys(args);
+=======
+
+  return simsh_launch(args);
+>>>>>>> 0cc8b5ac559b1ed03953c9eaac0368b55da56cdd
 }
 
 #define simsh_RL_BUFSIZE 1024
@@ -328,7 +369,11 @@ void simsh_loop(void)
   int result;
 
   do {
+<<<<<<< HEAD
     printf("\nWelcome to simsh, enter `help` to gain information on system.\n System ready for executing commands\n> ");
+=======
+    printf("Welcome to simsh, enter `info` to gain information on system.\n System ready for taking in commands\n> ");
+>>>>>>> 0cc8b5ac559b1ed03953c9eaac0368b55da56cdd
     input_string = simsh_linereader();
     args = simsh_extract(input_string);
     result = simsh_execute(args);
