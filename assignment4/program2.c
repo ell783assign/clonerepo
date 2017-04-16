@@ -448,7 +448,7 @@ int simsh_pushd(char **args)
 /*
  * @brief Builtin command: popd
  */
-int simsh_popd(void)
+int simsh_popd(char **args)
 {	struct path_string *stack_element;
 	if(path_stack.head==NULL)
 		return -1;
@@ -538,7 +538,7 @@ int simsh_path(char **args)
 /*
  * @brief Builtin command: dirs
  */
-int simsh_dirs(void)
+int simsh_dirs(char **args)
 {	struct path_string *stack_element;
 	stack_element=path_stack.head;
 	if(stack_element==NULL)
