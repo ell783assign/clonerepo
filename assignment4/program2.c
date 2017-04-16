@@ -43,6 +43,7 @@
 #define simsh_TOK_DELIM " \t\r\n\a"
 #define simsh_MAX_PATH_LEN 1024
 #define simsh_RL_BUFSIZE 1024
+#define MAX_CWD_LENGTH 1000 
 /****************************************************************************************/
 
 typedef struct circular_linked_list
@@ -51,6 +52,17 @@ typedef struct circular_linked_list
 	struct circular_linked_list *next;
 	struct circular_linked_list *prev;
 }CLL;
+
+struct path_string
+{	char *my_path;
+	struct path_string *next;
+};
+
+struct my_stack
+{	struct path_string *head;
+};
+
+struct my_stack path_stack;
 
 #define INIT_CLL_ROOT(LIST)					\
 	(LIST).self = NULL;						\
@@ -410,16 +422,45 @@ int simsh_exit(char **args)
  * @brief Builtin command: pushd.
  */
 int simsh_pushd(char **args)
-{
-  return 0;
+{	int chdir_retval;
+	struct path_string *stack_element;
+	char *getcwd_retval;
+	char path[MAX_CWD_LENGTH];
+	
+	getcwd_retval=getcwd(path,MAX_CWD_LENGTH);
+	if(getcwd_retval==NULL)
+	{	printf("\nCould not get current working directory");
+		return -1;
+	}
+	printf("\nTrying cd to %s",args[1]);
+	chdir_retval=chdir(args[1]);
+	if(chdir_retval==0)
+	{	
+		stack_element=(struct path_string *)malloc(sizeof(struct path_string));
+		stack_element->my_path=(char *)malloc(strlen(path)*sizeof(char));
+		strcpy(stack_element->my_path,path);
+		stack_element->next=path_stack.head;
+		path_stack.head=stack_element;
+		chdir_retval = 1;
+	}
+	return chdir_retval;
 }
 
 /*
  * @brief Builtin command: popd
  */
 int simsh_popd(char **args)
-{
-  return 0;
+{	struct path_string *stack_element;
+	if(path_stack.head==NULL)
+		return -1;
+	else
+	{	stack_element=path_stack.head;
+		path_stack.head=stack_element->next;
+		chdir(stack_element->my_path);
+		free(stack_element->my_path);
+		free(stack_element);
+		return 1;
+	}
 }
 
 /*
@@ -499,8 +540,16 @@ int simsh_path(char **args)
  * @brief Builtin command: dirs
  */
 int simsh_dirs(char **args)
-{
-  return 0;
+{	struct path_string *stack_element;
+	stack_element=path_stack.head;
+	if(stack_element==NULL)
+		return -1;
+	printf("\nStack Contents");
+	while(stack_element!=NULL)
+	{	printf("\n%s",stack_element->my_path);
+		stack_element=stack_element->next;
+	}
+	return 1;
 }
 /**
   @brief execute a program and wait for it to terminate.
