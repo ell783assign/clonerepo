@@ -3,7 +3,7 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 
-int main()
+int main(int argc, char **argv)
 {
 	pid_t pid;
   int result;
@@ -11,7 +11,7 @@ int main()
   pid = fork();
   if (pid == 0) {
     // Child process
-    if (execl("./test.sh", "test.sh", (char *)NULL) == -1) 
+    if (execl(argv[1], argv[1], *(argv + 2), (char *)NULL) == -1) 
     {
       perror("simsh");
     }

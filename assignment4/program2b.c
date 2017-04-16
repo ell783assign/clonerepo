@@ -1,10 +1,3 @@
-/*
- * program2.c
- *
- *  Created on: 09-Apr-2017
- *      Author: craft
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -44,6 +37,7 @@
 #define simsh_MAX_PATH_LEN 1024
 #define simsh_RL_BUFSIZE 1024
 #define MAX_CWD_LENGTH 1000 
+
 /****************************************************************************************/
 
 typedef struct circular_linked_list
@@ -151,14 +145,18 @@ int (*builtin_func[]) (char **) = {
   &simsh_dirs
 };
 
-int simsh_num_builtins() {
+/*
+ * @return num of builtin commands
+ */
+int simsh_num_builtins() 
+{
   return sizeof(builtin_str) / sizeof(char *);
 }
-
+/**********************************************************************************************************************************
+functions added by Anshul Sir
+*/
 
 CLL path;
-
-
 static char *print_path()
 {
 	static uint32_t multiplier = 1;
@@ -298,6 +296,7 @@ static int32_t try_execute(char *cmd, char *params[])
 			goto EXIT_LABEL;
 		}
 		TRACE("Command does not exist in CWD");
+		printf("Command does not exist in CWD");
 
 		/* Look in path variables. */
 		for(path_node = (PATH_LIST *)NEXT_IN_LIST(path);
@@ -309,6 +308,7 @@ static int32_t try_execute(char *cmd, char *params[])
 			if(ret_val == -1)
 			{
 				TRACE("Command does not exist in %s", path_node->path);
+				printf("Command does not exist in %s", path_node->path);
 			}
 			else
 			{
@@ -327,19 +327,190 @@ static int32_t try_execute(char *cmd, char *params[])
 EXIT_LABEL:
 	return(ret_val);
 }
+/**********************************************************************************************************************************
+ *Start from main() to up here for understanding flow of program
+ */
+
+/**
+  @brief execute a program and wait for it to terminate.
+  @param args Null terminated list of arguments (including program).
+  @return Always returns 1, to continue execution.
+ */
+int simsh_runsys(char **args)
+{
+
+	try_execute(args[0], args);
+	return 1;
+}
+
+/*
+ * @brief check whether a command exists in current directory or not
+ * @param arg The name of the command to search
+ * @return returns 1 if the command is present locally else 0
+ */
+int simsh_islocal(char *arg)
+{
+  if(access(arg, F_OK) != -1)
+  	{
+  		printf("\nCommand is present in specified absolute path.\n");
+  		return 1;
+  	}
+  	
+  
+  else
+  {
+  	printf("\nCommand is not present in current working directory. Look in system paths\n");
+  	return 0;
+  }
+}
+
+/*
+ * @brief execute a local program and wait for it to terminate
+ * @param args Null terminated list of arguments, no.of arguments (command excluded) limited to 2
+ * @return Always returns 1, to continue execution
+ */
+int simsh_runlocal(char **args)
+{
+  pid_t pid;
+  int result;
+
+  pid = fork();
+  if (pid == 0) {
+    // Child process
+    if (execl(args[0], args[0], args[1], (char *)NULL) == -1) {
+      perror("simsh");
+    }
+    exit(EXIT_FAILURE);
+  } else if (pid < 0) {
+    // Error forking
+    perror("simsh");
+  } else {
+    // Parent process
+    do {
+      waitpid(pid, &result, WUNTRACED);
+    } while (!WIFEXITED(result) && !WIFSIGNALED(result));
+  }
+
+  return 1;
+}
+
+/**
+   @brief Execute shell built-in or runsys program.
+   @param args Null terminated list of arguments.
+   @return 1 if the shell should continue running, 0 if it should terminate
+ */
+int simsh_execute(char **args)
+{
+  int i;
+
+  if (args[0] == NULL) {
+    // An empty command was entered.
+    return 1;
+  }
+
+  for (i = 0; i < simsh_num_builtins(); i++) {
+    if (strcmp(args[0], builtin_str[i]) == 0) {
+      return (*builtin_func[i])(args);
+    }
+  }
+  
+  if(simsh_islocal(args[0])!=0)
+  {
+    return simsh_runlocal(args);
+  }
+  return simsh_runsys(args);
+}
+
+/**
+   @brief Read a input_string of input from stdin.
+   @return The input_string from stdin.
+ */
+char *simsh_linereader(void)
+{
+  int bufsize = simsh_RL_BUFSIZE;
+  int position = 0;
+  char *buffer = malloc(sizeof(char) * bufsize);
+  int c;
+
+  if (!buffer) {
+    fprintf(stderr, "simsh: allocation error\n");
+    exit(EXIT_FAILURE);
+  }
+
+  while (1) {
+    // Read a character
+    c = getchar();
+
+    // If we hit EOF, replace it with a null character and return.
+    if (c == EOF || c == '\n') {
+      buffer[position] = '\0';
+      return buffer;
+    } else {
+      buffer[position] = c;
+    }
+    position++;
+
+    // If we have exceeded the buffer, reallocate.
+    if (position >= bufsize) {
+      bufsize += simsh_RL_BUFSIZE;
+      buffer = realloc(buffer, bufsize);
+      if (!buffer) {
+        fprintf(stderr, "simsh: allocation error\n");
+        exit(EXIT_FAILURE);
+      }
+    }
+  }
+}
+
+/**
+   @brief Split a input_string into tokens (very naively).
+   @param input_string The line.
+   @return Null-terminated array of tokens.
+ */
+char **simsh_extract(char *line)
+{
+  int bufsize = simsh_TOK_BUFSIZE, position = 0;
+  char **tokens = malloc(bufsize * sizeof(char*));
+  char *token, **tokens_backup;
+
+  if (!tokens) {
+    fprintf(stderr, "simsh: allocation error\n");
+    exit(EXIT_FAILURE);
+  }
+
+  token = strtok(line, simsh_TOK_DELIM);
+  while (token != NULL) {
+    tokens[position] = token;
+    position++;
+
+    if (position >= bufsize) {
+      bufsize += simsh_TOK_BUFSIZE;
+      tokens_backup = tokens;
+      tokens = realloc(tokens, bufsize * sizeof(char*));
+      if (!tokens) {
+		free(tokens_backup);
+        fprintf(stderr, "simsh: allocation error\n");
+        exit(EXIT_FAILURE);
+      }
+    }
+
+    token = strtok(NULL, simsh_TOK_DELIM);
+  }
+  tokens[position] = NULL;
+  return tokens;
+}
 
 /**
    @brief Loop getting input and executing it.
  */
-static void simsh_loop(void)
+void simsh_loop(void)
 {
   char *input_string;
   char **args;
   int result;
 
-  printf("\nWelcome to simsh, enter `help` to gain information on system.\nSystem ready for executing commands.");
   do {
-    printf("\n> ");
+    printf("\nWelcome to simsh, enter `help` to gain information on system.\n System ready for taking in commands\n> ");
     input_string = simsh_linereader();
     args = simsh_extract(input_string);
     result = simsh_execute(args);
@@ -348,26 +519,26 @@ static void simsh_loop(void)
     free(args);
   } while (result);
 }
-
 /**
    @brief Main entry point.
    @param argc Argument count.
    @param argv Argument vector.
    @return result code
  */
-int32_t main(void)
+int main(int argc, char **argv)
 {
-  INIT_CLL_ROOT(path);
+	INIT_CLL_ROOT(path);
 
-  // Run command loop.
-  simsh_loop();
+	// Run command loop.
+	simsh_loop();
 
-  // Perform any shutdown/cleanup.
+	// Perform any shutdown/cleanup.
 
-  return EXIT_SUCCESS;
+	return EXIT_SUCCESS;
 }
 
-/*
+
+/*********************************************************************************************************************************
   Builtin function implementations.
 */
 
@@ -389,7 +560,7 @@ int simsh_cd(char **args)
 }
 
 /**
-   @brief Builtin command: print help.
+   @brief Builtin command: print info.
    @param args List of args.  Not examined.
    @return Always returns 1, to continue executing.
  */
@@ -551,169 +722,3 @@ int simsh_dirs(char **args)
 	}
 	return 1;
 }
-/**
-  @brief execute a program and wait for it to terminate.
-  @param args Null terminated list of arguments (including program).
-  @return Always returns 1, to continue execution.
- */
-int simsh_runsys(char **args)
-{
-
-  try_execute(args[0], args);
-
-  return 1;
-}
-
-/*
- * @brief check whether a command exists in current directory or not
- * @param arg The name of the command to search
- * @return returns 1 if the command is present locally else 0
- */
-int simsh_islocal(char *arg)
-{
-  if(access(arg, F_OK) != -1)
-  	return 1;
-  
-  else
-  	return 0;
-}
-
-/*
- * @brief execute a local program and wait for it to terminate
- * @param args Null terminated list of arguments
- * @return Always returns 1, to continue execution
- */
-int simsh_runlocal(char **args)
-{
-  pid_t pid;
-  int result;
-  char path[1024];
-  memset(path, 0, sizeof(path));
-
-  pid = fork();
-  if (pid == 0) {
-    // Child process
-    sprintf(path, "./%s", args[0]);
-    if (execl((const char *)path, (const char *)args[0], args, (char *)NULL) == -1) {
-      perror("simsh");
-    }
-    exit(EXIT_FAILURE);
-  } else if (pid < 0) {
-    // Error forking
-    perror("simsh");
-  } else {
-    // Parent process
-    do {
-      waitpid(pid, &result, WUNTRACED);
-    } while (!WIFEXITED(result) && !WIFSIGNALED(result));
-  }
-
-  return 1;
-}
-
-/**
-   @brief Execute shell built-in or runsys program.
-   @param args Null terminated list of arguments.
-   @return 1 if the shell should continue running, 0 if it should terminate
- */
-int simsh_execute(char **args)
-{
-  int i;
-
-  if (args[0] == NULL) {
-    // An empty command was entered.
-    return 1;
-  }
-
-  for (i = 0; i < simsh_num_builtins(); i++) {
-    if (strcmp(args[0], builtin_str[i]) == 0) {
-      return (*builtin_func[i])(args);
-    }
-  }
-  
-  if(simsh_islocal(args[0])!=0)
-  {
-    return simsh_runlocal(args);
-  }
-  return simsh_runsys(args);
-}
-
-/**
-   @brief Read a input_string of input from stdin.
-   @return The input_string from stdin.
- */
-char *simsh_linereader(void)
-{
-  int bufsize = simsh_RL_BUFSIZE;
-  int position = 0;
-  char *buffer = malloc(sizeof(char) * bufsize);
-  int c;
-
-  if (!buffer) {
-    fprintf(stderr, "simsh: allocation error\n");
-    exit(EXIT_FAILURE);
-  }
-
-  while (1) {
-    // Read a character
-    c = getchar();
-
-    // If we hit EOF, replace it with a null character and return.
-    if (c == EOF || c == '\n') {
-      buffer[position] = '\0';
-      return buffer;
-    } else {
-      buffer[position] = c;
-    }
-    position++;
-
-    // If we have exceeded the buffer, reallocate.
-    if (position >= bufsize) {
-      bufsize += simsh_RL_BUFSIZE;
-      buffer = realloc(buffer, bufsize);
-      if (!buffer) {
-        fprintf(stderr, "simsh: allocation error\n");
-        exit(EXIT_FAILURE);
-      }
-    }
-  }
-}
-
-/**
-   @brief Split a input_string into tokens (very naively).
-   @param input_string The line.
-   @return Null-terminated array of tokens.
- */
-char **simsh_extract(char *line)
-{
-  int bufsize = simsh_TOK_BUFSIZE, position = 0;
-  char **tokens = malloc(bufsize * sizeof(char*));
-  char *token, **tokens_backup;
-
-  if (!tokens) {
-    fprintf(stderr, "simsh: allocation error\n");
-    exit(EXIT_FAILURE);
-  }
-
-  token = strtok(line, simsh_TOK_DELIM);
-  while (token != NULL) {
-    tokens[position] = token;
-    position++;
-
-    if (position >= bufsize) {
-      bufsize += simsh_TOK_BUFSIZE;
-      tokens_backup = tokens;
-      tokens = realloc(tokens, bufsize * sizeof(char*));
-      if (!tokens) {
-		free(tokens_backup);
-        fprintf(stderr, "simsh: allocation error\n");
-        exit(EXIT_FAILURE);
-      }
-    }
-
-    token = strtok(NULL, simsh_TOK_DELIM);
-  }
-  tokens[position] = NULL;
-  return tokens;
-}
-
