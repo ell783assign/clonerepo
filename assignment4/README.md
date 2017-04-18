@@ -1,3 +1,11 @@
+## How to run:
+
+1. `make clean`
+2. `make all`
+
+This creates binaries for both `program1.c` as `program1` and for `program2.c` as `sh`.
+
+In order to enable traces, see Makefile and uncomment the `BUILD_DEBUG` flag.
 ## Problem Statement
 
 __SHELL UTILITY__
