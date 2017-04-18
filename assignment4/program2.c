@@ -161,6 +161,7 @@ CLL path;
 
 static char *print_path()
 {
+	ENTRY();
 	static uint32_t multiplier = 1;
 	char *pp_path = (char *)malloc(sizeof(char) * simsh_MAX_PATH_LEN*multiplier);
 	PATH_LIST *path_elem = NULL;
@@ -210,6 +211,7 @@ static char *print_path()
 	}
 
 EXIT_LABEL:
+	EXIT();
 	return(pp_path);
 }
 
@@ -222,6 +224,7 @@ static int32_t execute(char *cmd_path, char *cmd, char *params[])
 	pid_t pid;
 	int result;
 
+	ENTRY();
 	char *pp_path = print_path();
 	if(pp_path==NULL)
 	{
@@ -270,6 +273,7 @@ static int32_t execute(char *cmd_path, char *cmd, char *params[])
 	}
 
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);
 }
 
@@ -288,6 +292,7 @@ static int32_t try_execute(char *cmd, char *params[])
 
 	char path_var[1024] = {0};
 
+	ENTRY();
 	ret_val = access(cmd, F_OK);
 	if(ret_val == -1)
 	{
@@ -316,6 +321,10 @@ static int32_t try_execute(char *cmd, char *params[])
 				break;
 			}
 		}
+		if(path_node==NULL)
+		{
+			fprintf(stderr, "Unknown command: %s\n", cmd);
+		}
 	}
 	else
 	{
@@ -325,6 +334,7 @@ static int32_t try_execute(char *cmd, char *params[])
 	}
 
 EXIT_LABEL:
+	EXIT();
 	return(ret_val);
 }
 
@@ -337,6 +347,7 @@ static void simsh_loop(void)
   char **args;
   int result;
 
+  ENTRY();
   printf("\nWelcome to simsh, enter `help` to gain information on system.\nSystem ready for executing commands.");
   do {
     printf("\n> ");
@@ -347,6 +358,7 @@ static void simsh_loop(void)
     free(input_string);
     free(args);
   } while (result);
+  EXIT();
 }
 
 /**
@@ -359,11 +371,12 @@ int32_t main(void)
 {
   INIT_CLL_ROOT(path);
 
+  ENTRY();
   // Run command loop.
   simsh_loop();
 
   // Perform any shutdown/cleanup.
-
+  EXIT();
   return EXIT_SUCCESS;
 }
 
@@ -378,6 +391,7 @@ int32_t main(void)
  */
 int simsh_cd(char **args)
 {
+	ENTRY();
   if (args[1] == NULL) {
     fprintf(stderr, "simsh: expected argument to \"cd\"\n");
   } else {
@@ -385,6 +399,7 @@ int simsh_cd(char **args)
       perror("simsh");
     }
   }
+  EXIT();
   return 1;
 }
 
@@ -395,6 +410,7 @@ int simsh_cd(char **args)
  */
 int simsh_help(char **args)
 {
+	ENTRY();
   int i;
   printf("Simple shell simulation\n");
   printf("Usage similar to shell utility, except for built-in commands you can run any simple shell command as well.\n");
@@ -405,6 +421,7 @@ int simsh_help(char **args)
   }
 
   printf("Use the man command for information on other programs.\n");
+  EXIT();
   return 1;
 }
 
@@ -422,17 +439,18 @@ int simsh_exit(char **args)
  * @brief Builtin command: pushd.
  */
 int simsh_pushd(char **args)
-{	int chdir_retval;
+{	
+	ENTRY();
+	int chdir_retval;
 	struct path_string *stack_element;
 	char *getcwd_retval;
 	char path[MAX_CWD_LENGTH];
 	
 	getcwd_retval=getcwd(path,MAX_CWD_LENGTH);
 	if(getcwd_retval==NULL)
-	{	printf("\nCould not get current working directory");
+	{	printf("Could not get current working directory");
 		return -1;
 	}
-	printf("\nTrying cd to %s",args[1]);
 	chdir_retval=chdir(args[1]);
 	if(chdir_retval==0)
 	{	
@@ -443,6 +461,11 @@ int simsh_pushd(char **args)
 		path_stack.head=stack_element;
 		chdir_retval = 1;
 	}
+	else
+	{
+		printf("Invalid directory : %s",args[1]);
+	}
+	EXIT();
 	return chdir_retval;
 }
 
@@ -450,15 +473,23 @@ int simsh_pushd(char **args)
  * @brief Builtin command: popd
  */
 int simsh_popd(char **args)
-{	struct path_string *stack_element;
+{	
+	ENTRY();
+	struct path_string *stack_element;
 	if(path_stack.head==NULL)
+	{
+		printf("Stack empty .");
+		EXIT();
 		return -1;
+	}
 	else
 	{	stack_element=path_stack.head;
 		path_stack.head=stack_element->next;
 		chdir(stack_element->my_path);
+		printf("Now in %s",stack_element->my_path);
 		free(stack_element->my_path);
 		free(stack_element);
+		EXIT();
 		return 1;
 	}
 }
@@ -468,6 +499,7 @@ int simsh_popd(char **args)
  */
 int simsh_path(char **args)
 {
+	ENTRY();
 	PATH_LIST *iterator = NULL;
 	PATH_LIST *insert = NULL;
 
@@ -533,6 +565,7 @@ int simsh_path(char **args)
 	{
 		ERROR("Unknown option.");
 	}
+	EXIT();
   return 1;
 }
 
@@ -540,15 +573,22 @@ int simsh_path(char **args)
  * @brief Builtin command: dirs
  */
 int simsh_dirs(char **args)
-{	struct path_string *stack_element;
+{	
+	ENTRY();
+	struct path_string *stack_element;
 	stack_element=path_stack.head;
 	if(stack_element==NULL)
+	{
+		printf("Stack is empty .");
+		EXIT();
 		return -1;
+	}
 	printf("\nStack Contents");
 	while(stack_element!=NULL)
 	{	printf("\n%s",stack_element->my_path);
 		stack_element=stack_element->next;
 	}
+	EXIT();
 	return 1;
 }
 /**
@@ -558,9 +598,9 @@ int simsh_dirs(char **args)
  */
 int simsh_runsys(char **args)
 {
-
+	ENTRY();
   try_execute(args[0], args);
-
+  EXIT();
   return 1;
 }
 
@@ -571,18 +611,17 @@ int simsh_runsys(char **args)
  */
 int simsh_islocal(char *arg)
 {
-  FILE *fp;
-  char cmd[1024];
-  sprintf(cmd, "%s", arg);
-  fp = fopen(cmd, "r");
-  if(fp!=NULL)
+	ENTRY();
+  if(access(arg, F_OK) != -1)
   {
-    fclose(fp);
-    return 1;
+  	EXIT();
+  	return 1;
   }
+  
   else
   {
-    return 0;
+  	EXIT();
+  	return 0;
   }
 }
 
@@ -593,6 +632,7 @@ int simsh_islocal(char *arg)
  */
 int simsh_runlocal(char **args)
 {
+	ENTRY();
   pid_t pid;
   int result;
   char path[1024];
@@ -601,10 +641,13 @@ int simsh_runlocal(char **args)
   pid = fork();
   if (pid == 0) {
     // Child process
-    sprintf(path, "./%s", args[0]);
-    if (execl((const char *)path, (const char *)args[0], args, (char *)NULL) == -1) {
+    TRACE("%s",path);
+    sprintf(path, "%s", args[0]);
+    TRACE("Try: %s",path);
+    if (execl((const char *)path, (const char *)args[0], args[1], (char *)NULL) == -1) {
       perror("simsh");
     }
+    EXIT();
     exit(EXIT_FAILURE);
   } else if (pid < 0) {
     // Error forking
@@ -615,7 +658,7 @@ int simsh_runlocal(char **args)
       waitpid(pid, &result, WUNTRACED);
     } while (!WIFEXITED(result) && !WIFSIGNALED(result));
   }
-
+  EXIT();
   return 1;
 }
 
@@ -626,23 +669,28 @@ int simsh_runlocal(char **args)
  */
 int simsh_execute(char **args)
 {
+	ENTRY();
   int i;
 
   if (args[0] == NULL) {
     // An empty command was entered.
+    EXIT();
     return 1;
   }
 
   for (i = 0; i < simsh_num_builtins(); i++) {
     if (strcmp(args[0], builtin_str[i]) == 0) {
+    	EXIT();
       return (*builtin_func[i])(args);
     }
   }
   
   if(simsh_islocal(args[0])!=0)
   {
+  	EXIT();
     return simsh_runlocal(args);
   }
+  EXIT();
   return simsh_runsys(args);
 }
 
@@ -652,6 +700,7 @@ int simsh_execute(char **args)
  */
 char *simsh_linereader(void)
 {
+	ENTRY();
   int bufsize = simsh_RL_BUFSIZE;
   int position = 0;
   char *buffer = malloc(sizeof(char) * bufsize);
@@ -685,6 +734,7 @@ char *simsh_linereader(void)
       }
     }
   }
+  EXIT();
 }
 
 /**

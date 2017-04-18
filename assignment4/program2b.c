@@ -1,8 +1,115 @@
-#include <sys/wait.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+
+#include <errno.h>
 #include <string.h>
+
+/****************************************************************************************/
+/* Custom defines section.															    */
+/****************************************************************************************/
+#ifdef BUILD_DEBUG
+#define TRACE(...) 	fprintf(stderr, "\nTRACE  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define WARN(...) 	fprintf(stderr, "\nWARN  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define ERROR(...)  fprintf(stderr, "\nERROR  \t%10s\t%3d\t", __func__, __LINE__);fprintf(stderr, __VA_ARGS__)
+#define ENTRY()		fprintf(stderr, "\nTRACE \t%10s\t%3d Enter {",__func__, __LINE__);
+#define EXIT()		fprintf(stderr, "\nTRACE \t%10s\t%3d Exit }",__func__, __LINE__);
+#else
+#define TRACE(...)
+#define WARN(...)
+#define ERROR(...)
+#define ENTRY()
+#define EXIT()
+#endif
+
+#define CONSOLE(...) 	fprintf(stderr,__VA_ARGS__)
+#define TRUE  		(uint32_t)1
+#define FALSE 		(uint32_t)0
+
+
+#define simsh_TOK_BUFSIZE 64
+#define simsh_TOK_DELIM " \t\r\n\a"
+#define simsh_MAX_PATH_LEN 1024
+#define simsh_RL_BUFSIZE 1024
+#define MAX_CWD_LENGTH 1000 
+
+/****************************************************************************************/
+
+typedef struct circular_linked_list
+{
+	void *self;
+	struct circular_linked_list *next;
+	struct circular_linked_list *prev;
+}CLL;
+
+struct path_string
+{	char *my_path;
+	struct path_string *next;
+};
+
+struct my_stack
+{	struct path_string *head;
+};
+
+struct my_stack path_stack;
+
+#define INIT_CLL_ROOT(LIST)					\
+	(LIST).self = NULL;						\
+	(LIST).prev = &(LIST);						\
+	(LIST).next = &(LIST);
+
+#define INIT_CLL_NODE(NODE,SELF)			\
+	(NODE).self = (SELF);					\
+	(NODE).next = NULL;					\
+	(NODE).prev = NULL;
+
+//Read as Insert A after B
+#define INSERT_AFTER(A,B)					\
+	(A).next = (B).next;						\
+	(A).next->prev = &(A);						\
+	(B).next = &(A);							\
+	(A).prev = &(B);
+
+//Read as Insert A before B
+#define INSERT_BEFORE(A,B)					\
+	(A).next = &(B);							\
+	(B).prev->next = &(A);						\
+	(A).prev = (B).prev;						\
+	(B).prev = &(A);
+
+#define REMOVE_FROM_LIST(A)					\
+	(A).next->prev = (A).prev;					\
+	(A).prev->next = (A).next;					\
+	(A).prev = NULL;							\
+	(A).next = NULL;
+
+#define NEXT_IN_LIST(NODE)						\
+	(NODE).next->self
+
+#define PREV_IN_LIST(NODE)						\
+	(NODE).prev->self
+
+typedef struct path_list
+{
+	CLL node;
+	char *path;
+}PATH_LIST;
+
+/****************************************************************************************/
+
+char *simsh_linereader(void);
+char **simsh_extract(char *);
+int simsh_execute(char **);
+int simsh_runsys(char **);
+int simsh_islocal(char *);
+int simsh_runlocal(char **);
+
+
 
 /*
   Function Declarations for builtin shell commands:
@@ -38,92 +145,192 @@ int (*builtin_func[]) (char **) = {
   &simsh_dirs
 };
 
-int simsh_num_builtins() {
+/*
+ * @return num of builtin commands
+ */
+int simsh_num_builtins() 
+{
   return sizeof(builtin_str) / sizeof(char *);
 }
-
-/*
-  Builtin function implementations.
+/**********************************************************************************************************************************
+functions added by Anshul Sir
 */
 
-/**
-   @brief Bultin command: change directory.
-   @param args List of args.  args[0] is "cd".  args[1] is the directory.
-   @return Always returns 1, to continue executing.
- */
-int simsh_cd(char **args)
+CLL path;
+static char *print_path()
 {
-  if (args[1] == NULL) {
-    fprintf(stderr, "simsh: expected argument to \"cd\"\n");
-  } else {
-    if (chdir(args[1]) != 0) {
-      perror("simsh");
-    }
-  }
-  return 1;
+	static uint32_t multiplier = 1;
+	char *pp_path = (char *)malloc(sizeof(char) * simsh_MAX_PATH_LEN*multiplier);
+	PATH_LIST *path_elem = NULL;
+	uint32_t path_len = 1; /* Always have space for a NULL char */
+
+	if(!pp_path)
+	{
+		ERROR("Error allocating memory!");
+	}
+	else
+	{
+		memset(pp_path, 0, simsh_MAX_PATH_LEN);
+		path_elem = (PATH_LIST *)NEXT_IN_LIST(path);
+		if(path_elem!=NULL)
+		{
+			if(path_len+strlen(path_elem->path)> simsh_MAX_PATH_LEN)
+			{
+				multiplier++;
+				pp_path = (char *)realloc(pp_path, sizeof(char) * simsh_MAX_PATH_LEN*multiplier);
+				if(!pp_path)
+				{
+					ERROR("Error growing buffer");
+					goto EXIT_LABEL;
+				}
+				path_len += strlen(path_elem->path);
+			}
+			strncat(pp_path, path_elem->path, strlen(path_elem->path));
+		}
+		while( (path_elem != NULL) && 
+				(path_elem = (PATH_LIST *)NEXT_IN_LIST(path_elem->node)) != NULL)
+		{
+			if(path_len+strlen(path_elem->path)+1> simsh_MAX_PATH_LEN) /* +1 for colon */
+			{
+				multiplier++;
+				pp_path = (char *)realloc(pp_path, sizeof(char) * simsh_MAX_PATH_LEN*multiplier);
+				if(!pp_path)
+				{
+					ERROR("Error growing buffer");
+					goto EXIT_LABEL;
+				}
+				path_len += strlen(path_elem->path);
+			}
+
+			strncat(pp_path, ":", strlen(":"));
+			strncat(pp_path, path_elem->path, strlen(path_elem->path));
+		}
+	}
+
+EXIT_LABEL:
+	return(pp_path);
 }
 
 /**
-   @brief Builtin command: print help.
-   @param args List of args.  Not examined.
-   @return Always returns 1, to continue executing.
+ * Execute command
  */
-int simsh_help(char **args)
+static int32_t execute(char *cmd_path, char *cmd, char *params[])
 {
-  int i;
-  printf("Simple shell simulation\n");
-  printf("Usage similar to shell utility, except for built-in commands you can run any simple shell command as well.\n");
-  printf("The following are built in:\n");
+	int32_t ret_val = 0;
+	pid_t pid;
+	int result;
 
-  for (i = 0; i < simsh_num_builtins(); i++) {
-    printf("  %s\n", builtin_str[i]);
-  }
+	char *pp_path = print_path();
+	if(pp_path==NULL)
+	{
+		ERROR("Error fetching PATH variable.");
+		goto EXIT_LABEL;
+	}
 
-  printf("Use the man command for information on other programs.\n");
-  return 1;
+	char *path_var = (char *)malloc(sizeof(char) * (strlen(pp_path)+6));
+	if(!path_var)
+	{
+		ERROR("Error allocating memory.");
+		goto EXIT_LABEL;
+	}
+	memset(path_var, 0, sizeof(char) * (strlen(pp_path)+6));
+
+	snprintf(path_var, strlen(pp_path)+6, "PATH=%s", pp_path);
+
+	char *child_env[] = {
+		path_var,
+		0
+	};
+
+	pid = fork();
+	if (pid == 0) 
+	{
+		// Child process
+		if (execve(cmd_path, &params[0], child_env) == -1) 
+		{
+			perror("simsh");
+		}
+
+		exit(EXIT_FAILURE);
+	} 
+	else if (pid < 0) 
+	{
+		// Error forking
+		perror("simsh");
+	} 
+	else 
+	{
+		// Parent process
+		do 
+		{
+			waitpid(pid, &result, WUNTRACED);
+		} while (!WIFEXITED(result) && !WIFSIGNALED(result));
+	}
+
+EXIT_LABEL:
+	return(ret_val);
 }
+
 
 /**
-   @brief Builtin command: exit.
-   @param args List of args.  Not examined.
-   @return Always returns 0, to terminate execution.
+ * @brief Try to execute command
+ *
+ * When executing a command, the shell should first look for the command in the current directory,
+ * and if not found, search the directories defined in a special variable, path.
  */
-int simsh_exit(char **args)
+static int32_t try_execute(char *cmd, char *params[])
 {
-  return 0;
-}
+	int32_t ret_val = 0;
 
-/**
- * @brief Builtin command: pushd.
- */
-int simsh_pushd(char **args)
-{
-  return 0;
-}
+	PATH_LIST *path_node = NULL;
 
-/*
- * @brief Builtin command: popd
- */
-int simsh_popd(char **args)
-{
-  return 0;
-}
+	char path_var[1024] = {0};
 
-/*
- * @brief Builtin command: path
- */
-int simsh_path(char **args)
-{
-  return 0;
-}
+	ret_val = access(cmd, F_OK);
+	if(ret_val == -1)
+	{
+		if(errno != ENOENT)
+		{
+			ERROR("Some error occurred!");
+			ret_val = -1;
+			goto EXIT_LABEL;
+		}
+		TRACE("Command does not exist in CWD");
+		printf("Command does not exist in CWD");
 
-/*
- * @brief Builtin command: dirs
- */
-int simsh_dirs(char **args)
-{
-  return 0;
+		/* Look in path variables. */
+		for(path_node = (PATH_LIST *)NEXT_IN_LIST(path);
+			path_node != NULL;
+			path_node = (PATH_LIST *)NEXT_IN_LIST(path_node->node))
+		{
+			snprintf(path_var, sizeof(path_var),"%s/%s", path_node->path, cmd);
+			ret_val = access(path_var, F_OK);
+			if(ret_val == -1)
+			{
+				TRACE("Command does not exist in %s", path_node->path);
+				printf("Command does not exist in %s", path_node->path);
+			}
+			else
+			{
+				ret_val = execute(path_var, cmd, params);
+				break;
+			}
+		}
+	}
+	else
+	{
+		/* Either it is an absolute path or found in local directory */
+		/* This must have been taken care of in a function already!*/
+		WARN("We probably shouldn't land up here!");
+	}
+
+EXIT_LABEL:
+	return(ret_val);
 }
+/**********************************************************************************************************************************
+ *Start from main() to up here for understanding flow of program
+ */
+
 /**
   @brief execute a program and wait for it to terminate.
   @param args Null terminated list of arguments (including program).
@@ -131,27 +338,9 @@ int simsh_dirs(char **args)
  */
 int simsh_runsys(char **args)
 {
-  pid_t pid;
-  int result;
 
-  pid = fork();
-  if (pid == 0) {
-    // Child process
-    if (execvp(args[0], args) == -1) {
-      perror("simsh");
-    }
-    exit(EXIT_FAILURE);
-  } else if (pid < 0) {
-    // Error forking
-    perror("simsh");
-  } else {
-    // Parent process
-    do {
-      waitpid(pid, &result, WUNTRACED);
-    } while (!WIFEXITED(result) && !WIFSIGNALED(result));
-  }
-
-  return 1;
+	try_execute(args[0], args);
+	return 1;
 }
 
 /*
@@ -161,39 +350,34 @@ int simsh_runsys(char **args)
  */
 int simsh_islocal(char *arg)
 {
-  FILE *fp;
-  char cmd[1024];
-  sprintf(cmd, "%s", arg);
-  fp = fopen(cmd, "r");
-  if(fp!=NULL)
-  {
-    fclose(fp);
-    return 1;
-  }
+  if(access(arg, F_OK) != -1)
+  	{
+  		printf("\nCommand is present in specified absolute path.\n");
+  		return 1;
+  	}
+  	
+  
   else
   {
-    fclose(fp);
-    return 0;
+  	printf("\nCommand is not present in current working directory. Look in system paths\n");
+  	return 0;
   }
 }
 
 /*
  * @brief execute a local program and wait for it to terminate
- * @param args Null terminated list of arguments
+ * @param args Null terminated list of arguments, no.of arguments (command excluded) limited to 2
  * @return Always returns 1, to continue execution
  */
 int simsh_runlocal(char **args)
 {
   pid_t pid;
   int result;
-  char path[1024];
-  memset(path, 0, sizeof(path));
 
   pid = fork();
   if (pid == 0) {
     // Child process
-    sprintf(path, "./%s", args[0]);
-    if (execl((const char *)path, (const char *)args[0], args, (char *)NULL) == -1) {
+    if (execl(args[0], args[0], args[1], (char *)NULL) == -1) {
       perror("simsh");
     }
     exit(EXIT_FAILURE);
@@ -237,7 +421,6 @@ int simsh_execute(char **args)
   return simsh_runsys(args);
 }
 
-#define simsh_RL_BUFSIZE 1024
 /**
    @brief Read a input_string of input from stdin.
    @return The input_string from stdin.
@@ -279,8 +462,6 @@ char *simsh_linereader(void)
   }
 }
 
-#define simsh_TOK_BUFSIZE 64
-#define simsh_TOK_DELIM " \t\r\n\a"
 /**
    @brief Split a input_string into tokens (very naively).
    @param input_string The line.
@@ -329,7 +510,7 @@ void simsh_loop(void)
   int result;
 
   do {
-    printf("\nWelcome to simsh, enter `help` to gain information on system.\n System ready for executing commands\n> ");
+    printf("\nWelcome to simsh, enter `help` to gain information on system.\n System ready for taking in commands\n> ");
     input_string = simsh_linereader();
     args = simsh_extract(input_string);
     result = simsh_execute(args);
@@ -338,7 +519,6 @@ void simsh_loop(void)
     free(args);
   } while (result);
 }
-
 /**
    @brief Main entry point.
    @param argc Argument count.
@@ -347,13 +527,198 @@ void simsh_loop(void)
  */
 int main(int argc, char **argv)
 {
-  // Load config files, if any.
+	INIT_CLL_ROOT(path);
 
-  // Run command loop.
-  simsh_loop();
+	// Run command loop.
+	simsh_loop();
 
-  // Perform any shutdown/cleanup.
+	// Perform any shutdown/cleanup.
 
-  return EXIT_SUCCESS;
+	return EXIT_SUCCESS;
 }
 
+
+/*********************************************************************************************************************************
+  Builtin function implementations.
+*/
+
+/**
+   @brief Bultin command: change directory.
+   @param args List of args.  args[0] is "cd".  args[1] is the directory.
+   @return Always returns 1, to continue executing.
+ */
+int simsh_cd(char **args)
+{
+  if (args[1] == NULL) {
+    fprintf(stderr, "simsh: expected argument to \"cd\"\n");
+  } else {
+    if (chdir(args[1]) != 0) {
+      perror("simsh");
+    }
+  }
+  return 1;
+}
+
+/**
+   @brief Builtin command: print info.
+   @param args List of args.  Not examined.
+   @return Always returns 1, to continue executing.
+ */
+int simsh_help(char **args)
+{
+  int i;
+  printf("Simple shell simulation\n");
+  printf("Usage similar to shell utility, except for built-in commands you can run any simple shell command as well.\n");
+  printf("The following are built in:\n");
+
+  for (i = 0; i < simsh_num_builtins(); i++) {
+    printf("  %s\n", builtin_str[i]);
+  }
+
+  printf("Use the man command for information on other programs.\n");
+  return 1;
+}
+
+/**
+   @brief Builtin command: exit.
+   @param args List of args.  Not examined.
+   @return Always returns 0, to terminate execution.
+ */
+int simsh_exit(char **args)
+{
+  return 0;
+}
+
+/**
+ * @brief Builtin command: pushd.
+ */
+int simsh_pushd(char **args)
+{	int chdir_retval;
+	struct path_string *stack_element;
+	char *getcwd_retval;
+	char path[MAX_CWD_LENGTH];
+	
+	getcwd_retval=getcwd(path,MAX_CWD_LENGTH);
+	if(getcwd_retval==NULL)
+	{	printf("\nCould not get current working directory");
+		return -1;
+	}
+	printf("\nTrying cd to %s",args[1]);
+	chdir_retval=chdir(args[1]);
+	if(chdir_retval==0)
+	{	
+		stack_element=(struct path_string *)malloc(sizeof(struct path_string));
+		stack_element->my_path=(char *)malloc(strlen(path)*sizeof(char));
+		strcpy(stack_element->my_path,path);
+		stack_element->next=path_stack.head;
+		path_stack.head=stack_element;
+		chdir_retval = 1;
+	}
+	return chdir_retval;
+}
+
+/*
+ * @brief Builtin command: popd
+ */
+int simsh_popd(char **args)
+{	struct path_string *stack_element;
+	if(path_stack.head==NULL)
+		return -1;
+	else
+	{	stack_element=path_stack.head;
+		path_stack.head=stack_element->next;
+		chdir(stack_element->my_path);
+		free(stack_element->my_path);
+		free(stack_element);
+		return 1;
+	}
+}
+
+/*
+ * @brief Builtin command: path
+ */
+int simsh_path(char **args)
+{
+	PATH_LIST *iterator = NULL;
+	PATH_LIST *insert = NULL;
+
+	if(args[1]==NULL)
+	{
+		fprintf(stderr, "\nPATH=%s\n",print_path());
+	}
+	else if(strncmp(args[1], "+", 1)==0)
+	{
+		/* Add args[2] to path */
+		TRACE("Add %s to path", args[2]);
+		insert = (PATH_LIST *)malloc(sizeof(PATH_LIST));
+		if(!insert)
+		{
+			ERROR("Error allocating memory");
+			fprintf(stderr, "PATH Addition failed.\n");
+		}
+		else
+		{
+			INIT_CLL_NODE(insert->node, insert);
+			insert->path = (char *)malloc(sizeof(char) * simsh_MAX_PATH_LEN);
+			if(!insert->path)
+			{
+				ERROR("Error allocating memory");
+				fprintf(stderr, "PATH Addition failed.\n");
+				free(insert);
+				insert = NULL;
+			}
+			else
+			{
+				memset(insert->path, 0, sizeof(char) * simsh_MAX_PATH_LEN);
+				snprintf(insert->path, strlen(args[2])+1, "%s", args[2]);
+				INSERT_BEFORE(insert->node, path);
+			}	
+		}
+	}
+	else if(strncmp(args[1], "-", 1)==0)
+	{
+		TRACE("Remove %s from path", args[2]);
+		for(iterator = (PATH_LIST *)NEXT_IN_LIST(path);
+			iterator != NULL;
+			iterator = (PATH_LIST *)NEXT_IN_LIST(iterator->node))
+		{
+			if(strncmp(iterator->path, args[2], ((strlen(args[2])> strlen(iterator->path) ? strlen(iterator->path): strlen(args[2]))))==0)
+			{
+				TRACE("Found entry!");
+				break;
+			}
+		}
+		if(iterator != NULL)
+		{
+			REMOVE_FROM_LIST(iterator->node);
+			free(iterator->path);
+			free(iterator);
+			iterator = NULL;
+		}
+		else
+		{
+			fprintf(stderr, "%s not found in PATH\n", args[2]);
+		}
+	}
+	else
+	{
+		ERROR("Unknown option.");
+	}
+  return 1;
+}
+
+/*
+ * @brief Builtin command: dirs
+ */
+int simsh_dirs(char **args)
+{	struct path_string *stack_element;
+	stack_element=path_stack.head;
+	if(stack_element==NULL)
+		return -1;
+	printf("\nStack Contents");
+	while(stack_element!=NULL)
+	{	printf("\n%s",stack_element->my_path);
+		stack_element=stack_element->next;
+	}
+	return 1;
+}
