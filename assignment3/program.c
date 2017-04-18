@@ -31,12 +31,48 @@
 #define EXIT()
 #endif
 
-#define WAKEUP(...) fprintf(stderr, "\e[1;32m\nWAKEUP\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
-#define SLEEP(...) fprintf(stderr, "\e[1;33m\nSLEEP\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
-#define DROP(...) fprintf(stderr, "\e[0;31m\nDROP\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
-#define CONSUME(...) fprintf(stderr, "\e[0;34m\nCONSUME\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
-#define FINISH(...) fprintf(stderr, "\e[0;35m\nFINISHED\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
-#define ARRIVAL(...) fprintf(stderr, "\e[0;36m\nARRIVAL\t");fprintf(stderr, __VA_ARGS__);fprintf(stderr,"\e[0m");
+#define WAKEUP(...) 																	\
+	{	pthread_mutex_lock(&GLOBAL.print_lock);											\
+		fprintf(stderr, "\e[1;32m\nWAKEUP\t");											\
+		fprintf(stderr, __VA_ARGS__);													\
+		fprintf(stderr,"\e[0m");														\
+		pthread_mutex_unlock(&GLOBAL.print_lock);										\
+	}
+#define SLEEP(...) 																		\
+	{	pthread_mutex_lock(&GLOBAL.print_lock);											\
+		fprintf(stderr, "\e[1;33m\nSLEEP\t");											\
+		fprintf(stderr, __VA_ARGS__);													\
+		fprintf(stderr,"\e[0m");														\
+		pthread_mutex_unlock(&GLOBAL.print_lock);										\
+	}
+#define DROP(...) 																		\
+	{	pthread_mutex_lock(&GLOBAL.print_lock);											\
+		fprintf(stderr, "\e[0;31m\nDROP\t");											\
+		fprintf(stderr, __VA_ARGS__);													\
+		fprintf(stderr,"\e[0m");														\
+		pthread_mutex_unlock(&GLOBAL.print_lock);										\
+	}
+#define CONSUME(...) 																	\
+	{	pthread_mutex_lock(&GLOBAL.print_lock);											\
+		fprintf(stderr, "\e[0;34m\nCONSUME\t");											\
+		fprintf(stderr, __VA_ARGS__);													\
+		fprintf(stderr,"\e[0m");														\
+		pthread_mutex_unlock(&GLOBAL.print_lock);										\
+		}
+#define FINISH(...) 																	\
+	{	pthread_mutex_lock(&GLOBAL.print_lock);											\
+		fprintf(stderr, "\e[0;35m\nFINISHED\t");										\
+		fprintf(stderr, __VA_ARGS__);													\
+		fprintf(stderr,"\e[0m");														\
+		pthread_mutex_unlock(&GLOBAL.print_lock);										\
+		}		
+#define ARRIVAL(...) 																	\
+	{	pthread_mutex_lock(&GLOBAL.print_lock);											\
+		fprintf(stderr, "\e[0;36m\nARRIVAL\t");											\
+		fprintf(stderr, __VA_ARGS__);													\
+		fprintf(stderr,"\e[0m");														\
+		pthread_mutex_unlock(&GLOBAL.print_lock);										\
+		}				
 
 #define CONSOLE(...) 	fprintf(stderr,__VA_ARGS__)
 #define TRUE  		(uint32_t)1
@@ -122,7 +158,11 @@ struct glob
 	/* clock */
 	uint32_t ticks;
 
+	/* User specified field */
 	int32_t num_jobs;
+
+	/* Mutex on printing: So that stream mixing does not occur */
+	pthread_mutex_t print_lock;
 }GLOBAL;
 
 typedef struct thread_context
@@ -313,8 +353,13 @@ int32_t main(int32_t argc, char *argv[])
 	fprintf(stderr,"Line capacity: %d\n", GLOBAL.capacity);
 	fprintf(stderr,"Number of customers: %d\n", GLOBAL.num_jobs);
 
+	ret_val = pthread_mutex_init(&GLOBAL.print_lock, NULL);
+	if(ret_val != 0)
+	{
+		ERROR("Error initializing mutex.");
+		goto EXIT_LABEL;
+	}
 	ret_val = 0;
-
 	consumers = (THREAD_CONTEXT *)malloc(sizeof(THREAD_CONTEXT) * GLOBAL.num_counters);
 	if(consumers == NULL)
 	{
